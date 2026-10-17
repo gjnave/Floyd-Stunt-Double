@@ -86,7 +86,7 @@ tar.exe -tf "%STAGE%\source.zip" | findstr /r /c:"\.\./" /c:"^/" /c:"^\\" >nul
 if not errorlevel 1 exit /b 1
 tar.exe -xf "%STAGE%\source.zip" -C "%STAGE%"
 if errorlevel 1 exit /b 1
-for /d %%D in ("%STAGE%\*") do if exist "%%D\Floyd-Stunt-Double\app.py" if exist "%%D\Floyd-Stunt-Double\pipeline.py" if exist "%%D\Floyd-Stunt-Double\model_manager.py" (
+for /d %%D in ("%STAGE%\*") do if exist "%%D\Floyd-Stunt-Double\app.py" if exist "%%D\Floyd-Stunt-Double\pipeline.py" if exist "%%D\Floyd-Stunt-Double\model_manager.py" if exist "%%D\Floyd-Stunt-Double\headliner_addon.py" if exist "%%D\Floyd-Stunt-Double\headliner-requirements.txt" (
   if not exist "%APP%" mkdir "%APP%"
   xcopy "%%D\Floyd-Stunt-Double\*" "%APP%\" /E /I /Y >nul
   if errorlevel 1 exit /b 1
