@@ -291,6 +291,7 @@ def model_panel_state(previous=None):
         gr.update(interactive=has_files("head") and actions_idle),
         gr.update(interactive=running),
         create_button, swap_button, swap_button, guided_button, (video, head),
+        gr.update(visible=video), gr.update(visible=head),
     )
 
 
@@ -473,6 +474,8 @@ def build_ui():
                     gr.Markdown("**Start here:** Video Swap downloads to this PC and enables full-character replacement. Add Head Swap later for closer facial likeness while aiming to keep the original body, clothes, and scene. Your phone controls the app; it does not run the models.")
                     model_note = gr.Markdown("Video Swap models are ready." if initial_video else
                                              f"**Video Swap · not installed** — about {VIDEO_GB:.1f} GB. Changes a person's overall look while following the video performance.")
+                    video_installed = gr.Markdown("✓ Video Swap INSTALLED — download complete and verified.",
+                                                  visible=initial_video, elem_id="ggf-video-installed")
                     with gr.Row():
                         video_install = gr.Button(f"Download Video Swap models to this PC · about {VIDEO_GB:.1f} GB", variant="primary",
                                                   interactive=not initial_video)
@@ -480,6 +483,8 @@ def build_ui():
                     video_confirm = gr.Button("Confirm: remove this app's Video Swap model files", visible=False)
                     head_model_note = gr.Markdown("Head Swap models are ready." if initial_head else
                                                   f"**Head Swap · not installed** — about {HEAD_GB:.1f} GB more. For closer facial likeness; install Video Swap first.")
+                    head_installed = gr.Markdown("✓ Head Swap INSTALLED — download complete and verified.",
+                                                 visible=initial_head, elem_id="ggf-head-installed")
                     with gr.Row():
                         head_install = gr.Button(f"Add Head Swap models to this PC · about {HEAD_GB:.1f} GB", variant="secondary",
                                                  interactive=initial_video and not initial_head)
@@ -596,7 +601,7 @@ def build_ui():
         panel_outputs = [welcome, create_notice, create_jump, guided_install_notice, guided_install_jump,
                          model_note, head_model_note, install_note, video_install, head_install,
                          video_remove, head_remove, stop_download, submit, guided_auto_button, guided_swap_button,
-                         guided_submit, model_previous]
+                         guided_submit, model_previous, video_installed, head_installed]
         install_timer.tick(model_panel_state, inputs=[model_previous], outputs=panel_outputs, queue=False)
         refresh.click(lambda: (status_models(), "Head Swap models ready." if headliner_ready()
                                else "Head Swap models are not installed. Add them above if you want this workflow."),

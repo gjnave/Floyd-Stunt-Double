@@ -38,11 +38,13 @@ class OptionalModelTests(unittest.TestCase):
         with patch("app.pack_status", return_value=state), patch("app.work_busy", return_value=False), \
                 patch("app.has_files", return_value=False):
             updates = app.model_panel_state((False, False))
-        self.assertEqual(len(updates), 18)
+        self.assertEqual(len(updates), 20)
         self.assertTrue(updates[0]["visible"])
         self.assertIn("36.2 GB", updates[5])
         self.assertIn("19.0 GB", updates[6])
         self.assertFalse(updates[9]["interactive"])
+        self.assertFalse(updates[18]["visible"])
+        self.assertFalse(updates[19]["visible"])
 
     def test_video_install_enables_create_without_resetting_other_tabs(self):
         state = {"video_ready": True, "head_ready": False,
@@ -54,6 +56,17 @@ class OptionalModelTests(unittest.TestCase):
         self.assertTrue(updates[9]["interactive"])
         self.assertTrue(updates[13]["interactive"])
         self.assertEqual(updates[17], (True, False))
+        self.assertTrue(updates[18]["visible"])
+        self.assertFalse(updates[19]["visible"])
+
+    def test_completed_head_download_shows_both_installed_badges(self):
+        state = {"video_ready": True, "head_ready": True,
+                 "running": False, "status": "Head Swap models installed and verified.", "started": 0.0}
+        with patch("app.pack_status", return_value=state), patch("app.work_busy", return_value=False), \
+                patch("app.has_files", return_value=True):
+            updates = app.model_panel_state((True, False))
+        self.assertTrue(updates[18]["visible"])
+        self.assertTrue(updates[19]["visible"])
 
     def test_automatic_swap_uses_whole_frame_without_paint_upload(self):
         source = MagicMock()

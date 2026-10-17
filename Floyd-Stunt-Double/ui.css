@@ -10,6 +10,8 @@ body, .gradio-container { background:var(--ggf-bg)!important; color:var(--ggf-in
 #ggf-hero .links { margin-top:12px; display:flex; gap:14px; flex-wrap:wrap; }
 #ggf-status { background:#10243a; border:1px solid #315678; border-left:4px solid var(--ggf-gold); border-radius:10px; padding:9px 14px; }
 #ggf-model-welcome { background:#18283f; border:1px solid #f5b942; border-radius:12px; padding:12px 16px; color:var(--ggf-ink); }
+#ggf-video-installed, #ggf-head-installed { background:#0c3028; border:1px solid #37c993; border-radius:10px; padding:8px 12px; }
+#ggf-video-installed p, #ggf-head-installed p { color:#b7f7d9!important; font-weight:800; margin:0; }
 #ggf-liz-guide { background:linear-gradient(135deg,#17233c,#111b31); border:1px solid #8c6a2f; border-radius:16px; padding:clamp(12px,2vw,20px); margin:8px 0 16px; }
 #ggf-liz-guide h3 { color:var(--ggf-gold); margin-top:0; }
 #ggf-liz-guide p { color:var(--ggf-ink); line-height:1.5; }
