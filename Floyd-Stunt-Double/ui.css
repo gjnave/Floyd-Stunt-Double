@@ -10,6 +10,10 @@ body, .gradio-container { background:var(--ggf-bg)!important; color:var(--ggf-in
 #ggf-hero .links { margin-top:12px; display:flex; gap:14px; flex-wrap:wrap; }
 #ggf-status { background:#10243a; border:1px solid #315678; border-left:4px solid var(--ggf-gold); border-radius:10px; padding:9px 14px; }
 #ggf-model-welcome { background:#18283f; border:1px solid #f5b942; border-radius:12px; padding:12px 16px; color:var(--ggf-ink); }
+#ggf-liz-guide { background:linear-gradient(135deg,#17233c,#111b31); border:1px solid #8c6a2f; border-radius:16px; padding:clamp(12px,2vw,20px); margin:8px 0 16px; }
+#ggf-liz-guide h3 { color:var(--ggf-gold); margin-top:0; }
+#ggf-liz-guide p { color:var(--ggf-ink); line-height:1.5; }
+#ggf-liz-guide img, #ggf-liz-guide video { max-height:220px; object-fit:contain; border-radius:10px; }
 #ggf-generate { font-weight:800!important; background:var(--ggf-gold)!important; color:#091425!important; }
 #ggf-generate button:disabled, #ggf-generate[disabled] { background:#334155!important; color:#b0bfd2!important; cursor:not-allowed!important; }
 #ggf-guided-generate, #ggf-guided-auto { font-weight:800!important; background:var(--ggf-gold)!important; color:#091425!important; }
@@ -26,4 +30,4 @@ body, .gradio-container { background:var(--ggf-bg)!important; color:var(--ggf-in
 #ggf-result video { max-height:70vh; object-fit:contain; }
 #ggf-guided-result video { max-height:70vh; object-fit:contain; }
 #ggf-footer { margin-top:18px; color:var(--ggf-muted); font-size:.82rem; text-align:center; }
-@media(max-width:700px) { #ggf-shell { padding:8px; } #ggf-hero { padding:16px; } #ggf-result video { max-height:60vh; } }
+@media(max-width:700px) { #ggf-shell { padding:8px; } #ggf-hero { padding:16px; } #ggf-liz-guide { padding:12px; } #ggf-result video { max-height:60vh; } }

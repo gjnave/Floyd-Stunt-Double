@@ -22,6 +22,10 @@ from pipeline import APP, OUTPUTS, JobPlan, cancel_active, generate, video_info,
 from update_source import check as check_source, apply as apply_source
 
 CSS = (APP / "ui.css").read_text(encoding="utf-8")
+LIZ_ASSETS = APP / "assets"
+LIZ_POSTER = LIZ_ASSETS / "liz-guide.png"
+LIZ_WELCOME_CLIP = LIZ_ASSETS / "liz-stunt-welcome.mp4"
+LIZ_CHOICES_CLIP = LIZ_ASSETS / "liz-stunt-choices.mp4"
 VIDEO_GB = VIDEO_BYTES / 1e9
 HEAD_GB = HEAD_BYTES / 1e9
 ACTIVE_ACCESS = "local"
@@ -245,20 +249,32 @@ def status_models():
     return "Video Swap models are ready." if video_ready() else "Video Swap models are not installed yet. Open Settings to add them."
 
 
+def liz_guide_media(clip: Path) -> None:
+    """Use a finished Liz clip when present; keep the guide usable without it."""
+    if clip.is_file():
+        gr.Video(value=str(clip), interactive=False, show_label=False, height=220)
+    else:
+        gr.Image(value=str(LIZ_POSTER), interactive=False, show_label=False, height=220)
+
+
 def model_panel_state(previous=None):
     state = pack_status()
     video, head = bool(state["video_ready"]), bool(state["head_ready"])
     running = bool(state["running"])
     actions_idle = not running and not work_busy()
     earlier = previous if isinstance(previous, (tuple, list)) and len(previous) == 2 else (video, head)
-    welcome = ("**Welcome to Floyd Stunt Double.** Install Video Swap below to start creating. "
-               "Head Swap + Video is an optional second download; you can add it later.")
+    welcome = ("**First, download Video Swap models to this PC in Settings.** "
+               "Head Swap is an optional second download for closer facial likeness.")
     guided_missing = ("**Video Swap is not installed.** Install it in Settings first."
                       if not video else "**Head Swap is optional and not installed.** Add it in Settings to use this tab.")
-    video_note = ("**Video Swap · ready** — use the Create tab."
-                  if video else f"**Video Swap · not installed** — about {VIDEO_GB:.1f} GB of model downloads.")
-    head_note = ("**Head Swap · ready** — Head Swap + Video is available."
-                 if head else f"**Head Swap · not installed** — about {HEAD_GB:.1f} GB more. Install Video Swap first.")
+    video_note = (("**Video Swap · ready** — use the Create tab. "
+                   if video else f"**Video Swap · not installed** — about {VIDEO_GB:.1f} GB of model downloads. ")
+                  + "Changes a person's overall look from a character image, including face, body, and outfit, "
+                    "while following the source video's performance.")
+    head_note = (("**Head Swap · ready** — Head Swap + Video is available. "
+                  if head else f"**Head Swap · not installed** — about {HEAD_GB:.1f} GB more. Install Video Swap first. ")
+                 + "Adds Headliner's frame-based head replacement for closer facial likeness. The video step "
+                   "aims to retain the original body, clothes, and scene; fast motion or cuts can still change details.")
     job_note = str(state["status"] or "Choose a model pack below. Downloads are verified and can be resumed.")
     create_button = gr.update(interactive=video) if video != earlier[0] else gr.update()
     swap_button = gr.update(interactive=head) if head != earlier[1] else gr.update()
@@ -347,7 +363,7 @@ def build_ui():
                 <div class="links"><a href="https://getgoingfast.pro" target="_blank">GetGoingFast.pro ↗</a>
                 <a href="https://youtube.com/@TheAIHobbyGuy" target="_blank">The AI Hobby Guy ↗</a></div></div>''')
             welcome = gr.Markdown(
-                "**Welcome to Floyd Stunt Double.** Install Video Swap in Settings to start creating. Head Swap + Video can be added later.",
+                "**First, download Video Swap models to this PC in Settings.** Head Swap is an optional second download for closer facial likeness.",
                 visible=not initial_video, elem_id="ggf-model-welcome")
             status = gr.Markdown("Ready. Upload a video and a character image." if initial_video
                                  else "Choose Video Swap models in Settings to begin.", elem_id="ggf-status")
@@ -431,17 +447,41 @@ def build_ui():
                         guided_audio = gr.Checkbox(value=True, label="Keep the source video’s audio")
                         guided_extra = gr.Textbox(label="Extra video direction", lines=2)
                 with gr.Tab("Settings", id="settings"):
+                    with gr.Column(visible=not initial_video, elem_id="ggf-liz-guide") as liz_guide:
+                        with gr.Column(visible=True) as liz_step_one:
+                            gr.Markdown("### Meet Liz · Step 1 of 2")
+                            with gr.Row():
+                                with gr.Column(scale=1, min_width=180):
+                                    liz_guide_media(LIZ_WELCOME_CLIP)
+                                with gr.Column(scale=2, min_width=250):
+                                    gr.Markdown("**Howdy, pardner! Welcome to Floyd Stunt Double. First, download the Video Swap models to your PC. Then you're ready to create.**")
+                                    gr.Markdown("Using the page on a phone controls this PC; the models download to the PC, not the phone.")
+                            with gr.Row():
+                                liz_next = gr.Button("Next · choose your look", variant="primary")
+                                liz_skip = gr.Button("Skip introduction")
+                        with gr.Column(visible=False) as liz_step_two:
+                            gr.Markdown("### Meet Liz · Step 2 of 2")
+                            with gr.Row():
+                                with gr.Column(scale=1, min_width=180):
+                                    liz_guide_media(LIZ_CHOICES_CLIP)
+                                with gr.Column(scale=2, min_width=250):
+                                    gr.Markdown("**Video Swap changes the whole character. Add Head Swap for a closer face while trying to keep the original body and clothes.**")
+                                    gr.Markdown("Head Swap models are optional and require Video Swap first. Motion and scene cuts can still change details.")
+                            liz_done = gr.Button("Choose models below", variant="primary")
+                    liz_replay = gr.Button("Meet Liz · replay the 2-step guide", variant="secondary", visible=initial_video)
                     gr.Markdown("### Model downloads")
-                    gr.Markdown("Start with Video Swap. Add Head Swap only if you want the Head Swap + Video workflow. Your PC downloads and verifies these files; nothing runs on the phone.")
-                    model_note = gr.Markdown("Video Swap models are ready." if initial_video else "Video Swap models are not installed yet.")
+                    gr.Markdown("**Start here:** Video Swap downloads to this PC and enables full-character replacement. Add Head Swap later for closer facial likeness while aiming to keep the original body, clothes, and scene. Your phone controls the app; it does not run the models.")
+                    model_note = gr.Markdown("Video Swap models are ready." if initial_video else
+                                             f"**Video Swap · not installed** — about {VIDEO_GB:.1f} GB. Changes a person's overall look while following the video performance.")
                     with gr.Row():
-                        video_install = gr.Button(f"Install Video Swap models · about {VIDEO_GB:.1f} GB", variant="primary",
+                        video_install = gr.Button(f"Download Video Swap models to this PC · about {VIDEO_GB:.1f} GB", variant="primary",
                                                   interactive=not initial_video)
                         video_remove = gr.Button("Remove Video Swap models", interactive=has_files("video"))
                     video_confirm = gr.Button("Confirm: remove this app's Video Swap model files", visible=False)
-                    head_model_note = gr.Markdown("Head Swap models are ready." if initial_head else "Head Swap models are not installed yet.")
+                    head_model_note = gr.Markdown("Head Swap models are ready." if initial_head else
+                                                  f"**Head Swap · not installed** — about {HEAD_GB:.1f} GB more. For closer facial likeness; install Video Swap first.")
                     with gr.Row():
-                        head_install = gr.Button(f"Add Head Swap models · about {HEAD_GB:.1f} GB", variant="secondary",
+                        head_install = gr.Button(f"Add Head Swap models to this PC · about {HEAD_GB:.1f} GB", variant="secondary",
                                                  interactive=initial_video and not initial_head)
                         head_remove = gr.Button("Remove Head Swap models", interactive=has_files("head"))
                     head_confirm = gr.Button("Confirm: remove this app's Head Swap model files", visible=False)
@@ -471,6 +511,15 @@ def build_ui():
                     shutdown_note = gr.Markdown("")
             gr.HTML('<div id="ggf-footer">Powered by MiniMax H3, Qwen Image 2.1, BFS Head Swap, and Viggle Turbo · Floyd family / GGF</div>')
         preview.click(preview_frame, inputs=[source, start], outputs=[frame, frame_note], queue=False)
+        liz_next.click(lambda: (gr.update(visible=False), gr.update(visible=True)),
+                       outputs=[liz_step_one, liz_step_two], queue=False)
+        liz_skip.click(lambda: (gr.update(visible=False), gr.update(visible=True)),
+                       outputs=[liz_guide, liz_replay], queue=False)
+        liz_done.click(lambda: (gr.update(visible=False), gr.update(visible=True)),
+                       outputs=[liz_guide, liz_replay], queue=False)
+        liz_replay.click(lambda: (gr.update(visible=True), gr.update(visible=True),
+                                  gr.update(visible=False), gr.update(visible=False)),
+                         outputs=[liz_guide, liz_step_one, liz_step_two, liz_replay], queue=False)
         create_jump.click(lambda: gr.update(selected="settings"), outputs=[tabs], queue=False)
         guided_install_jump.click(lambda: gr.update(selected="settings"), outputs=[tabs], queue=False)
         submit.click(lambda: (None, "Queued…", gr.update(interactive=False, value="Generating…")),
@@ -568,7 +617,7 @@ def launch_one(demo, port, **kwargs):
         try:
             return demo.launch(server_port=candidate, prevent_thread_lock=True,
                                show_error=True, theme=gr.themes.Base(primary_hue="amber", neutral_hue="slate"),
-                               css=CSS, allowed_paths=[str(APP / "outputs"), str(APP / "previews")], **kwargs)
+                               css=CSS, allowed_paths=[str(APP / "outputs"), str(APP / "previews"), str(LIZ_ASSETS)], **kwargs)
         except OSError as error:
             if "Cannot find empty port" not in str(error) and getattr(error, "winerror", None) != 10048:
                 raise
