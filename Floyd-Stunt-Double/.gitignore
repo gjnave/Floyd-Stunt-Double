@@ -1,0 +1,11 @@
+.venv/
+engine/
+runtime/
+models/
+jobs/
+outputs/
+previews/
+backups/
+access.json
+__pycache__/
+*.pyc
