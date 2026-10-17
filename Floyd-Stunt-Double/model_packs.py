@@ -1,12 +1,14 @@
 """Optional, app-owned model packs for Floyd Stunt Double.
 
 The customer installer prepares the base runtime. Model weights and the optional
-Head Swap runtime are installed later from Settings through the same INSTALL.bat.
+Head Swap runtime are installed later from Settings. Member installations use
+the separate customer BAT; manual source clones use model_pack_setup.py.
 """
 from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -60,13 +62,14 @@ def _run_install(pack: str) -> None:
     last = "Preparing the model download" if pack == "video" else "Preparing the Head Swap runtime and models"
     log = APP / "logs" / f"model-install-{pack}.log"
     try:
-        if not installer.is_file():
-            raise FileNotFoundError("INSTALL.bat is missing beside the app folder.")
         env = {**os.environ, "GGF_UNATTENDED": "1"}
+        command = (["cmd.exe", "/d", "/c", str(installer), mode]
+                   if installer.is_file() else
+                   [sys.executable, str(APP / "model_pack_setup.py"), pack])
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as output:
             output.write(f"\n--- {time.strftime('%Y-%m-%d %H:%M:%S')} · {mode} ---\n")
-            with subprocess.Popen(["cmd.exe", "/d", "/c", str(installer), mode],
+            with subprocess.Popen(command,
                                   cwd=str(APP.parent), env=env, stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, text=True, errors="replace", bufsize=1,
                                   creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)) as process:

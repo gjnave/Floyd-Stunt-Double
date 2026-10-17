@@ -12,3 +12,5 @@ Floyd-Stunt-Double/logs/
 Floyd-Stunt-Double/access.json
 **/__pycache__/
 *.pyc
+/INSTALL.bat
+/UPDATE.bat

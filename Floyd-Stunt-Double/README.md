@@ -4,7 +4,7 @@ Replace one character in a source video while following the original performance
 
 ## Windows installation
 
-Download the small installer package and double-click `INSTALL.bat`. It keeps the app in the adjacent `Floyd-Stunt-Double` folder, provisions private Python through uv, and prepares the app runtime **without downloading model weights**. Use `RUN.bat` after setup completes. If models are missing, Settings opens with a friendly install choice. Select Video Swap first (about 36.2 GB); optionally add Head Swap + Video later (about 19.0 GB of weights plus a separate private Python 3.11 runtime). Settings verifies each download and offers a separately confirmed removal action for each app-owned pack. No model weights are packaged in the ZIP.
+For manual source setup, follow the numbered steps in the [repository README](../README.md). The separate Get Going Fast member package provides a guided CMD installer. If models are missing, Settings opens with a friendly install choice. Select Video Swap first (about 36.2 GB); optionally add Head Swap + Video later (about 19.0 GB of weights plus a separate private Python 3.11 runtime). Settings verifies each download and offers a separately confirmed removal action for each app-owned pack. No model weights are packaged in the member ZIP.
 
 Liz's two-step video guide in Settings explains the model choice and can be skipped or replayed. Video Swap changes the overall character; optional Head Swap first edits a selected frame for closer facial likeness while aiming to retain the original body and clothing. Both model packs download to the PC, even when you control the app from a phone. The two short Liz clips are app assets, not model weights.
 

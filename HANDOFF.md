@@ -2,7 +2,7 @@
 
 ## Product and layout
 
-Follow `D:\apps2review\GGF-APP-BUILD-GUIDE.md` and the root GGF branding guide before changing the UI or release. `INSTALL.bat` sits beside `Floyd-Stunt-Double/`; the customer ZIP contains only `INSTALL.bat`, `RUN.bat`, `UPDATE.bat`, `disclaimer.md`, and `about.nfo`. Do not package app source, models, caches, environments, jobs, or outputs. Never delete files without the owner's explicit permission.
+Follow `D:\apps2review\GGF-APP-BUILD-GUIDE.md` and the root GGF branding guide before changing the UI or release. The separate member `INSTALL.bat` sits beside `Floyd-Stunt-Double/`; the customer ZIP contains only `INSTALL.bat`, `RUN.bat`, `UPDATE.bat`, `disclaimer.md`, and `about.nfo`. Do not commit the quick installer or updater BAT to the public source repository. Manual source setup is numbered in the root README. Do not package app source, models, caches, environments, jobs, or outputs. Never delete files without the owner's explicit permission.
 
 The existing **Create** tab is the MiniMax H3 character/body-swap flow. The additive **Head Swap + Video** tab previews a frame of an uploaded video, automatically transfers the one visible head when possible, and retains optional painting to hide/protect other heads. The remaining visible head is the target. The edited still guides the existing H3 video generator. Painted/protected pixels remain exact in the still, but video generation can still change details; do not promise pixel-identical clothing across all frames.
 

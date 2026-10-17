@@ -13,11 +13,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 PACKAGE = ROOT.parent
 APP_FILES = (
-    "app.py", "pipeline.py", "model_manager.py", "model_packs.py", "engine_manager.py",
+    "app.py", "pipeline.py", "model_manager.py", "model_packs.py", "model_pack_setup.py", "engine_manager.py",
     "headliner_addon.py", "headliner-requirements.txt",
     "access.py", "ui.css", "README.md", ".gitignore", "update_source.py",
 )
-ROOT_FILES = ("INSTALL.bat", "RUN.bat", "UPDATE.bat")
+ROOT_FILES = ("RUN.bat",)
 SOURCES = tuple(f"Floyd-Stunt-Double/{name}" for name in APP_FILES) + ROOT_FILES
 MIRRORS = (
     "https://codeberg.org/Cognibuild/Floyd-Stunt-Double/archive/main.zip",
