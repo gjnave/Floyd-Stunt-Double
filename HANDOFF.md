@@ -37,6 +37,8 @@ The guided tab now has an automatic, unpainted one-person head swap matching Hea
 
 Painted head selection must focus the Headliner input crop on the selected head: the pinned core worker does not accept a mask, so a wide crop can cause it to edit an adjacent person while the output composite hides that change. `headliner_addon._model_crop` uses only a narrow margin around the painted region; the existing full-frame automatic path stays unchanged. The saved mask still limits compositing to painted pixels. A real two-person regression frame was rendered successfully with the intended left head changed and the unpainted right person pixel-identical to the source.
 
+The guided workflow has independent **Frame to swap at**, **Video start**, and **Video length** controls. Changing Video start/length does not clear the completed head swap; changing the source video or frame-selection time does. `guided_state["frame_time"]` tracks the chosen still; the video generation plan uses the separate start/duration. Both ordinary and Turbo guided generation validate frame time against the finished swap. The source-upload duration preset resets video start and fills video length without coupling them to frame selection.
+
 The root `INSTALL.bat` accepts a downloaded repository by its app entry point, not by optional feature files. It creates the UV-managed runtime and installs dependencies; model packs are requested from Settings. Do not add a version-specific source-file gate to the installer. Mirror the complete source revision to Codeberg and GitHub before distributing an installer ZIP.
 
 ## Turbo preview

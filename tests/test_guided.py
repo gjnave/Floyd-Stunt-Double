@@ -11,12 +11,64 @@ from unittest.mock import patch
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Floyd-Stunt-Double"))
+import app
 from headliner_addon import selected_frame, reswap, _model_crop
 from pipeline import run_protocol_worker
 from app import latest_saved_video
 
 
 class GuidedFrameTests(unittest.TestCase):
+    def test_video_can_start_before_head_swap_frame(self):
+        with tempfile.TemporaryDirectory() as folder:
+            video = Path(folder) / "video.mp4"
+            head = Path(folder) / "head.png"
+            result = Path(folder) / "swapped.png"
+            for file in (video, head, result):
+                file.touch()
+            state = {"video": str(video.resolve()), "head": str(head.resolve()),
+                     "frame_time": 3.0, "result": str(result)}
+            captured = []
+
+            def fake_generate(plan):
+                captured.append(plan)
+                yield "Generation complete · saved to result.mp4", "result.mp4"
+
+            with patch("app.begin_generation", return_value=True), patch("app.end_generation"), \
+                    patch("app.generate", side_effect=fake_generate):
+                updates = list(app.guided_generate(video, head, state, 3, "left person", 0, 5,
+                                                   .4, True, True, "", 3))
+                stale_frame = list(app.guided_generate(video, head, state, 4, "left person", 0, 5,
+                                                       .4, True, True, "", 3))
+            self.assertEqual(len(captured), 1)
+            self.assertEqual(captured[0].start, 0)
+            self.assertEqual(captured[0].duration, 5)
+            self.assertEqual(captured[0].character, result)
+            self.assertEqual(updates[-1][1], "result.mp4")
+            self.assertEqual(len(captured), 1)
+            self.assertIn("selected frame changed", stale_frame[-1][0])
+
+    def test_video_start_does_not_reset_selected_frame(self):
+        config = app.build_ui().get_config_file()
+        labels = {item["id"]: item.get("props", {}).get("label", "") for item in config["components"]}
+        frame_id = next(key for key, label in labels.items() if label.startswith("Frame to swap at"))
+        start_id = next(key for key, label in labels.items() if label == "Video start at (seconds)")
+        length_id = next(key for key, label in labels.items() if label.startswith("Video length (seconds"))
+        reset_targets = {target[0] for event in config["dependencies"]
+                         if (event.get("api_name") or "").startswith("reset_guided")
+                         for target in event["targets"]}
+        self.assertIn(frame_id, reset_targets)
+        self.assertNotIn(start_id, reset_targets)
+        self.assertNotIn(length_id, reset_targets)
+        preview_inputs = next(event["inputs"] for event in config["dependencies"]
+                              if event.get("api_name") == "guided_preview")
+        self.assertIn(frame_id, preview_inputs)
+        self.assertNotIn(start_id, preview_inputs)
+        generate_inputs = next(event["inputs"] for event in config["dependencies"]
+                               if event.get("api_name") == "guided_generate")
+        self.assertIn(frame_id, generate_inputs)
+        self.assertIn(start_id, generate_inputs)
+        self.assertIn(length_id, generate_inputs)
+
     def test_painted_crop_focuses_on_one_person(self):
         original = Image.new("RGB", (1920, 1080))
         mask = Image.new("L", original.size, 0)
