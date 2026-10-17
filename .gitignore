@@ -1,0 +1,13 @@
+installer-cache/
+test-data/
+*.zip
+Floyd-Stunt-Double/.venv/
+Floyd-Stunt-Double/engine/
+Floyd-Stunt-Double/runtime/
+Floyd-Stunt-Double/jobs/
+Floyd-Stunt-Double/outputs/
+Floyd-Stunt-Double/previews/
+Floyd-Stunt-Double/backups/
+Floyd-Stunt-Double/access.json
+**/__pycache__/
+*.pyc
