@@ -163,6 +163,20 @@ def selected_frame(editor: dict, frame_path: str) -> tuple[Image.Image, Image.Im
     return original, mask
 
 
+def _model_crop(original: Image.Image, mask: Image.Image) -> tuple[int, int, int, int]:
+    """Focus model inference on the painted head, not nearby people.
+
+    The Headliner head-transfer worker does not accept a mask. The painted area
+    selects its input crop, while the same mask limits compositing afterward.
+    """
+    left, top, right, bottom = mask.getbbox()
+    if (left, top, right, bottom) == (0, 0, original.width, original.height):
+        return 0, 0, original.width, original.height
+    pad = max(24, round(max(right - left, bottom - top) * .08))
+    return (max(0, left - pad), max(0, top - pad),
+            min(original.width, right + pad), min(original.height, bottom + pad))
+
+
 def _render_swap(original: Image.Image, mask: Image.Image, head_path: Path, feather: int = 8) -> Path:
     if not ready():
         raise RuntimeError("Head Swap models are not installed. Open Settings to add them.")
@@ -170,10 +184,7 @@ def _render_swap(original: Image.Image, mask: Image.Image, head_path: Path, feat
         raise ValueError("Upload a head reference image.")
     if mask.size != original.size or mask.getbbox() is None:
         raise ValueError("The saved head selection is invalid. Preview the frame and try again.")
-    left, top, right, bottom = mask.getbbox()
-    pad = max(32, round(max(right - left, bottom - top) * .5))
-    crop = (max(0, left - pad), max(0, top - pad),
-            min(original.width, right + pad), min(original.height, bottom + pad))
+    crop = _model_crop(original, mask)
     job = JOBS / ("head-" + time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
     job.mkdir(parents=True, exist_ok=False)
     body = job / "body.png"

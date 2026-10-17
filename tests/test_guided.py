@@ -11,12 +11,26 @@ from unittest.mock import patch
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Floyd-Stunt-Double"))
-from headliner_addon import selected_frame, reswap
+from headliner_addon import selected_frame, reswap, _model_crop
 from pipeline import run_protocol_worker
 from app import latest_saved_video
 
 
 class GuidedFrameTests(unittest.TestCase):
+    def test_painted_crop_focuses_on_one_person(self):
+        original = Image.new("RGB", (1920, 1080))
+        mask = Image.new("L", original.size, 0)
+        ImageDraw.Draw(mask).rectangle((444, 2, 1244, 959), fill=255)
+        crop = _model_crop(original, mask)
+        self.assertGreaterEqual(crop[0], 350)
+        self.assertLessEqual(crop[2], 1350)
+        self.assertEqual(crop[1], 0)
+
+    def test_unpainted_auto_swap_keeps_full_frame(self):
+        original = Image.new("RGB", (1920, 1080))
+        mask = Image.new("L", original.size, 255)
+        self.assertEqual(_model_crop(original, mask), (0, 0, 1920, 1080))
+
     def test_painted_mask_scales_to_full_frame(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "frame.png"

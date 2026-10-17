@@ -35,6 +35,8 @@ The Head Swap editor can occasionally fail Gradio preprocessing while uploading 
 
 The guided tab now has an automatic, unpainted one-person head swap matching Headliner's simple path. Painted selection remains in an optional accordion for multiple people or tighter pixel preservation. A browser-side low-volume two-tone chime fires when video generation or a head swap completes, subject to browser audio restrictions. `model_packs.py` and `tests/test_optional_models.py` are source files; `update_source.py` lists the former.
 
+Painted head selection must focus the Headliner input crop on the selected head: the pinned core worker does not accept a mask, so a wide crop can cause it to edit an adjacent person while the output composite hides that change. `headliner_addon._model_crop` uses only a narrow margin around the painted region; the existing full-frame automatic path stays unchanged. The saved mask still limits compositing to painted pixels. A real two-person regression frame was rendered successfully with the intended left head changed and the unpainted right person pixel-identical to the source.
+
 The root `INSTALL.bat` accepts a downloaded repository by its app entry point, not by optional feature files. It creates the UV-managed runtime and installs dependencies; model packs are requested from Settings. Do not add a version-specific source-file gate to the installer. Mirror the complete source revision to Codeberg and GitHub before distributing an installer ZIP.
 
 ## Turbo preview
