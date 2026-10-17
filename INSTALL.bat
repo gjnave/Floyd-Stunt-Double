@@ -25,6 +25,7 @@ if not exist "%APP%\runtime\uv.exe" (
 set "UV_PYTHON_INSTALL_DIR=%APP%\runtime\python"
 set "UV_PYTHON_DOWNLOADS=automatic"
 set "VIRTUAL_ENV="
+if /I "%~1"=="headswap" goto addon
 if not exist "%APP%\.venv\Scripts\python.exe" (
   "%APP%\runtime\uv.exe" venv --managed-python --python 3.12 "%APP%\.venv"
   if errorlevel 1 goto failed
@@ -42,8 +43,29 @@ if errorlevel 1 goto failed
 if errorlevel 1 goto failed
 "%PY%" "%APP%\model_manager.py" --verify-only
 if errorlevel 1 goto failed
+call :addon
+if errorlevel 1 goto failed
 echo Setup complete. Double-click RUN.bat.
 if not defined GGF_UNATTENDED pause
+exit /b 0
+
+:addon
+if not exist "%APP%\.venv\Scripts\python.exe" (
+  echo Install the main app first by running INSTALL.bat without arguments.
+  goto failed
+)
+if not exist "%APP%\engine\headliner\.venv\Scripts\python.exe" (
+  "%APP%\runtime\uv.exe" venv --managed-python --python 3.11 "%APP%\engine\headliner\.venv"
+  if errorlevel 1 goto failed
+)
+set "HEADPY=%APP%\engine\headliner\.venv\Scripts\python.exe"
+"%APP%\runtime\uv.exe" pip install --python "%HEADPY%" --index-url https://download.pytorch.org/whl/cu130 torch==2.10.0+cu130 torchvision==0.25.0+cu130 torchaudio==2.10.0+cu130
+if errorlevel 1 goto failed
+"%APP%\runtime\uv.exe" pip install --python "%HEADPY%" -r "%APP%\headliner-requirements.txt"
+if errorlevel 1 goto failed
+"%APP%\.venv\Scripts\python.exe" "%APP%\headliner_addon.py"
+if errorlevel 1 goto failed
+echo Head Swap add-on is ready. Return to the app and preview a frame.
 exit /b 0
 
 :fetch_source
