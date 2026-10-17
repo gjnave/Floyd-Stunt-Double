@@ -105,6 +105,18 @@ def preview_frame(video, start):
     return str(target), f"Frame at {at:.1f}s · source {width} × {height} · {total:.1f}s"
 
 
+def preset_video_length(video):
+    """Start a newly loaded clip at zero and show its actual full duration."""
+    path = _path(video)
+    if not path or not path.is_file():
+        return 0, 8, ""
+    try:
+        seconds, _, _, _ = video_info(path)
+    except (OSError, ValueError) as error:
+        return gr.update(), gr.update(), f"Could not read this video's length: {error}"
+    return 0, round(seconds, 2), f"Uploaded video: {seconds:.2f}s · Length preset to the full clip."
+
+
 def run_generation(video, character, target, start, duration, megapixels, turbo, preserve_audio, extra,
                    preview_seconds, preview=False):
     full_label = "Generate · Ctrl+Enter"
@@ -410,7 +422,8 @@ def build_ui():
                     target = gr.Textbox(label="Who in the video should change?", placeholder="The woman on the left", lines=1)
                     with gr.Row():
                         start = gr.Number(label="Start at (seconds)", value=0, precision=1, minimum=0)
-                        duration = gr.Number(label="Length (seconds; 0 = to the end)", value=8, precision=1, minimum=0)
+                        duration = gr.Number(label="Length (seconds; 0 = to the end)", value=8, precision=2, minimum=0)
+                    video_duration_note = gr.Markdown("")
                     with gr.Row():
                         preview = gr.Button("Preview start frame", variant="secondary")
                         frame_note = gr.Markdown("")
@@ -443,7 +456,8 @@ def build_ui():
                         guided_head = gr.Image(label="2 · New head reference", type="filepath", height=300)
                     with gr.Row():
                         guided_start = gr.Number(label="Start at (seconds)", value=0, precision=1, minimum=0)
-                        guided_duration = gr.Number(label="Length (seconds; 0 = to the end)", value=8, precision=1, minimum=0)
+                        guided_duration = gr.Number(label="Length (seconds; 0 = to the end)", value=8, precision=2, minimum=0)
+                    guided_video_duration_note = gr.Markdown("")
                     guided_preview_button = gr.Button("3 · Preview frame", variant="secondary")
                     guided_frame_note = gr.Markdown("")
                     guided_frame_path = gr.State(None)
@@ -554,6 +568,10 @@ def build_ui():
                     shutdown_note = gr.Markdown("")
             gr.HTML('<div id="ggf-footer">Powered by MiniMax H3, Qwen Image 2.1, BFS Head Swap, and Viggle Turbo · Floyd family / GGF</div>')
         preview.click(preview_frame, inputs=[source, start], outputs=[frame, frame_note], queue=False)
+        source.change(preset_video_length, inputs=[source],
+                      outputs=[start, duration, video_duration_note], queue=False)
+        guided_source.change(preset_video_length, inputs=[guided_source],
+                             outputs=[guided_start, guided_duration, guided_video_duration_note], queue=False)
         liz_next.click(lambda: (gr.update(visible=False), gr.update(visible=True)),
                        outputs=[liz_step_one, liz_step_two], queue=False)
         liz_skip.click(lambda: (gr.update(visible=False), gr.update(visible=True)),

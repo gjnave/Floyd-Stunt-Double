@@ -12,9 +12,9 @@ The Video Swap choice downloads H3 Ref2VA weights and the H3 Character Swap V1.5
 
 ## Using it
 
-1. Add the source video and a reference picture of the new character.
+1. Add the source video and a reference picture of the new character. Loading a video resets Start to zero and presets Length to that video's full duration; edit either value freely afterward.
 2. Preview the chosen starting frame and describe which person in the video changes.
-3. Press **Turbo preview** to check a short, smaller video first, or **Generate** for the selected output quality and full chosen length. Turbo preview defaults to three seconds; change its length under More control, or set it to `0` to preview the entire selected interval. Both workflows use the same app-owned models. The default full length is eight seconds; set Length to `0` for the rest of the video. Long clips run as consecutive eight-second parts and may show joins.
+3. Press **Turbo preview** to check a short, smaller video first, or **Generate** for the selected output quality and full chosen length. Turbo preview defaults to three seconds; change its length under More control, or set it to `0` to preview the entire selected interval. Both workflows use the same app-owned models. Length defaults to the full uploaded clip, but you can enter any shorter duration or set it to `0` for the rest of the video from Start. Long clips run as consecutive eight-second parts and may show joins.
 4. Watch or download the finished file in `outputs`.
 
 Local access needs no login. In Settings, choose a phone access mode and restart the app. A blank remote password allows anyone with the link to use it. A password affects phone access only; the local page stays password-free.
