@@ -8,6 +8,7 @@ Floyd-Stunt-Double/jobs/
 Floyd-Stunt-Double/outputs/
 Floyd-Stunt-Double/previews/
 Floyd-Stunt-Double/backups/
+Floyd-Stunt-Double/logs/
 Floyd-Stunt-Double/access.json
 **/__pycache__/
 *.pyc

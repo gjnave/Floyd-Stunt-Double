@@ -189,7 +189,7 @@ def generate(plan: JobPlan):
         raise RuntimeError("A generation is already running. Wait or press Stop.")
     missing = missing_models()
     if missing:
-        raise RuntimeError("Required models are missing: " + ", ".join(missing) + ". Run INSTALL.bat.")
+        raise RuntimeError("Video Swap models are missing: " + ", ".join(missing) + ". Install them from Settings.")
     engine = engine_root()
     if not (engine / "helpers/generate_ref.py").is_file():
         raise RuntimeError("Inference runtime is missing. Run INSTALL.bat.")

@@ -51,12 +51,13 @@ def verify(path: Path, expected_size: int, expected_hash: str) -> bool:
 
 
 def run(verify_only: bool = False, adapters_only: bool = False) -> int:
-    for repo, revision, remote, local, size, sha in FILES:
+    for index, (repo, revision, remote, local, size, sha) in enumerate(FILES, 1):
         if adapters_only and not local.startswith("loras/"):
             continue
         target = MODEL_ROOT / local
+        print(f"[{index}/{len(FILES)}] Checking {target.name}", flush=True)
         if verify(target, size, sha):
-            print(f"Verified: {target.name}", flush=True)
+            print(f"[{index}/{len(FILES)}] Verified: {target.name}", flush=True)
             continue
         if verify_only:
             print(f"Missing or damaged: {target}", flush=True)
@@ -82,7 +83,7 @@ def run(verify_only: bool = False, adapters_only: bool = False) -> int:
             shutil.copy2(downloaded, target)
         if not verify(target, size, sha):
             raise RuntimeError(f"Installed model verification failed: {target}")
-        print(f"Verified: {target.name}", flush=True)
+        print(f"[{index}/{len(FILES)}] Verified: {target.name}", flush=True)
     print("All six required model files are verified.", flush=True)
     return 0
 

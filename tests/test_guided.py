@@ -4,13 +4,16 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Floyd-Stunt-Double"))
-from headliner_addon import selected_frame
+from headliner_addon import selected_frame, reswap
 from pipeline import run_protocol_worker
+from app import latest_saved_video
 
 
 class GuidedFrameTests(unittest.TestCase):
@@ -34,6 +37,33 @@ class GuidedFrameTests(unittest.TestCase):
             image.save(path)
             with self.assertRaisesRegex(ValueError, "Paint over"):
                 selected_frame({"background": image, "layers": []}, str(path))
+
+    def test_retry_uses_saved_mask_without_editor_upload(self):
+        with tempfile.TemporaryDirectory() as folder:
+            frame = Path(folder) / "frame.png"
+            mask = Path(folder) / "mask.png"
+            head = Path(folder) / "head.png"
+            Image.new("RGB", (200, 100), "blue").save(frame)
+            painted = Image.new("L", (200, 100), 0)
+            ImageDraw.Draw(painted).rectangle((40, 20, 90, 70), fill=255)
+            painted.save(mask)
+            Image.new("RGB", (100, 100), "red").save(head)
+            with patch("headliner_addon._render_swap", return_value=Path(folder) / "result.png") as worker:
+                reswap(str(frame), str(mask), head)
+                self.assertEqual(worker.call_args.args[1].getbbox(), (40, 20, 91, 71))
+
+    def test_latest_saved_video_can_be_recovered(self):
+        with tempfile.TemporaryDirectory() as folder:
+            first = Path(folder) / "Floyd-Stunt-Double-first.mp4"
+            second = Path(folder) / "Floyd-Stunt-Double-second.mp4"
+            first.write_bytes(b"first")
+            second.write_bytes(b"second")
+            os.utime(first, ns=(1_000_000_000, 1_000_000_000))
+            os.utime(second, ns=(2_000_000_000, 2_000_000_000))
+            with patch("app.OUTPUTS", Path(folder)):
+                video, note = latest_saved_video()
+            self.assertEqual(video, str(second))
+            self.assertIn("second.mp4", note)
 
     def test_one_shot_worker_protocol(self):
         code = ("import json,sys; "

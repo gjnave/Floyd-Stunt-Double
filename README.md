@@ -4,7 +4,7 @@ A local Windows app for replacing one character in a video while following the o
 
 ## Install
 
-Clone or download this repository, then double-click `INSTALL.bat` beside the `Floyd-Stunt-Double` folder. The installer sets up private Python environments, downloads the inference runtimes and all required models for both tabs, and verifies their hashes. It does not require preinstalled Python, a separate Headliner app, or a ComfyUI server. Allow roughly 55 GB for weights plus runtime and working space. On completion, double-click `RUN.bat`.
+Clone or download this repository, then double-click `INSTALL.bat` beside the `Floyd-Stunt-Double` folder. The installer sets up private Python and the app runtime, but does not download model weights. Double-click `RUN.bat`; if Video Swap models are absent, the app opens Settings with a clear installation choice. The Video Swap pack is about 36.2 GB. Head Swap + Video adds about 19.0 GB in model weights and its separate runtime; both packs are downloaded and verified only when selected in Settings. There is no need for preinstalled Python, a separate Headliner app, or a ComfyUI server. Allow extra disk space for runtimes and working files.
 
 Requires Windows 64-bit and an NVIDIA CUDA GPU with a current driver. The tested machine has 24 GB VRAM; lower-memory cards may need more offloading and run more slowly or fail on demanding clips.
 

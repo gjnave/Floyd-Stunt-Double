@@ -114,6 +114,7 @@ def install() -> None:
         target = root / name
         print(f"[{index}/{len(WEIGHTS)}] Checking {name}", flush=True)
         if _verified(target, size, sha):
+            print(f"[{index}/{len(WEIGHTS)}] Verified {name}", flush=True)
             continue
         if target.exists():
             raise RuntimeError(f"Existing file failed verification and was preserved: {target}")
@@ -128,6 +129,7 @@ def install() -> None:
             shutil.copy2(cached, target)
         if not _verified(target, size, sha):
             raise RuntimeError(f"Installed file failed validation: {target}")
+        print(f"[{index}/{len(WEIGHTS)}] Verified {name}", flush=True)
     if not ready(check_hash=True):
         raise RuntimeError("Head Swap installation did not verify completely")
     print("Head Swap models and inference core are ready.", flush=True)
@@ -161,12 +163,13 @@ def selected_frame(editor: dict, frame_path: str) -> tuple[Image.Image, Image.Im
     return original, mask
 
 
-def swap(editor: dict, frame_path: str, head_path: Path, feather: int = 8) -> Path:
+def _render_swap(original: Image.Image, mask: Image.Image, head_path: Path, feather: int = 8) -> Path:
     if not ready():
-        raise RuntimeError("Head Swap models are not installed. Run INSTALL.bat on this PC.")
+        raise RuntimeError("Head Swap models are not installed. Open Settings to add them.")
     if not head_path.is_file():
         raise ValueError("Upload a head reference image.")
-    original, mask = selected_frame(editor, frame_path)
+    if mask.size != original.size or mask.getbbox() is None:
+        raise ValueError("The saved head selection is invalid. Preview the frame and try again.")
     left, top, right, bottom = mask.getbbox()
     pad = max(32, round(max(right - left, bottom - top) * .5))
     crop = (max(0, left - pad), max(0, top - pad),
@@ -198,7 +201,34 @@ def swap(editor: dict, frame_path: str, head_path: Path, feather: int = 8) -> Pa
     OUTPUTS.mkdir(parents=True, exist_ok=True)
     result = OUTPUTS / f"Floyd-Stunt-Double-Head-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}.png"
     edited.save(result)
+    mask.save(result.with_suffix(".mask.png"))
     return result
+
+
+def swap(editor: dict, frame_path: str, head_path: Path, feather: int = 8) -> Path:
+    original, mask = selected_frame(editor, frame_path)
+    return _render_swap(original, mask, head_path, feather)
+
+
+def automatic(frame_path: str, head_path: Path) -> Path:
+    """Follow Headliner's unpainted, single-visible-person head-swap path."""
+    if not frame_path or not Path(frame_path).is_file():
+        raise ValueError("Preview a frame before swapping the head.")
+    with Image.open(frame_path) as source:
+        original = ImageOps.exif_transpose(source).convert("RGB")
+    full_frame = Image.new("L", original.size, 255)
+    return _render_swap(original, full_frame, head_path)
+
+
+def reswap(frame_path: str, mask_path: str, head_path: Path, feather: int = 8) -> Path:
+    """Retry with the saved selection, without re-uploading the phone's editor canvas."""
+    if not frame_path or not Path(frame_path).is_file() or not mask_path or not Path(mask_path).is_file():
+        raise ValueError("Preview and paint a frame before trying another head swap.")
+    with Image.open(frame_path) as source:
+        original = ImageOps.exif_transpose(source).convert("RGB")
+    with Image.open(mask_path) as source:
+        mask = source.convert("L")
+    return _render_swap(original, mask, head_path, feather)
 
 
 if __name__ == "__main__":

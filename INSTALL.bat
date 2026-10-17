@@ -25,7 +25,9 @@ if not exist "%APP%\runtime\uv.exe" (
 set "UV_PYTHON_INSTALL_DIR=%APP%\runtime\python"
 set "UV_PYTHON_DOWNLOADS=automatic"
 set "VIRTUAL_ENV="
-if /I "%~1"=="headswap" goto addon
+if /I "%~1"=="models-video" goto models_video
+if /I "%~1"=="models-head" goto models_head
+if /I "%~1"=="headswap" goto models_head
 if not exist "%APP%\.venv\Scripts\python.exe" (
   "%APP%\runtime\uv.exe" venv --managed-python --python 3.12 "%APP%\.venv"
   if errorlevel 1 goto failed
@@ -39,20 +41,14 @@ if errorlevel 1 goto failed
 if errorlevel 1 goto failed
 "%APP%\runtime\uv.exe" pip install --python "%PY%" -r "%APP%\engine\presets\requirements-runtime.txt" "gradio==6.29.0" "huggingface_hub>=0.35,<2" "imageio-ffmpeg>=0.6,<1" "torchcodec==0.11.1"
 if errorlevel 1 goto failed
-"%PY%" "%APP%\model_manager.py"
-if errorlevel 1 goto failed
-"%PY%" "%APP%\model_manager.py" --verify-only
-if errorlevel 1 goto failed
-call :addon
-if errorlevel 1 goto failed
-echo Setup complete. Double-click RUN.bat.
+echo Setup complete. Double-click RUN.bat, then choose model downloads in Settings.
 if not defined GGF_UNATTENDED pause
 exit /b 0
 
-:addon
+:addon_dependencies
 if not exist "%APP%\.venv\Scripts\python.exe" (
   echo Install the main app first by running INSTALL.bat without arguments.
-  goto failed
+  exit /b 1
 )
 if not exist "%APP%\engine\headliner\.venv\Scripts\python.exe" (
   "%APP%\runtime\uv.exe" venv --managed-python --python 3.11 "%APP%\engine\headliner\.venv"
@@ -62,10 +58,27 @@ set "HEADPY=%APP%\engine\headliner\.venv\Scripts\python.exe"
 "%APP%\runtime\uv.exe" pip install --python "%HEADPY%" --index-url https://download.pytorch.org/whl/cu130 torch==2.10.0+cu130 torchvision==0.25.0+cu130 torchaudio==2.10.0+cu130
 if errorlevel 1 goto failed
 "%APP%\runtime\uv.exe" pip install --python "%HEADPY%" -r "%APP%\headliner-requirements.txt"
+if errorlevel 1 exit /b 1
+exit /b 0
+
+:models_video
+if not exist "%APP%\.venv\Scripts\python.exe" goto failed
+set "PY=%APP%\.venv\Scripts\python.exe"
+"%PY%" "%APP%\model_manager.py"
 if errorlevel 1 goto failed
+"%PY%" "%APP%\model_manager.py" --verify-only
+if errorlevel 1 goto failed
+echo Video Swap models are ready.
+exit /b 0
+
+:models_head
+if not exist "%APP%\.venv\Scripts\python.exe" goto failed
+call :addon_dependencies
+if errorlevel 1 goto failed
+set "PY=%APP%\.venv\Scripts\python.exe"
 "%APP%\.venv\Scripts\python.exe" "%APP%\headliner_addon.py"
 if errorlevel 1 goto failed
-echo Head Swap add-on is ready. Return to the app and preview a frame.
+echo Head Swap models are ready.
 exit /b 0
 
 :fetch_source
@@ -86,7 +99,7 @@ tar.exe -tf "%STAGE%\source.zip" | findstr /r /c:"\.\./" /c:"^/" /c:"^\\" >nul
 if not errorlevel 1 exit /b 1
 tar.exe -xf "%STAGE%\source.zip" -C "%STAGE%"
 if errorlevel 1 exit /b 1
-for /d %%D in ("%STAGE%\*") do if exist "%%D\Floyd-Stunt-Double\app.py" if exist "%%D\Floyd-Stunt-Double\pipeline.py" if exist "%%D\Floyd-Stunt-Double\model_manager.py" if exist "%%D\Floyd-Stunt-Double\headliner_addon.py" if exist "%%D\Floyd-Stunt-Double\headliner-requirements.txt" (
+for /d %%D in ("%STAGE%\*") do if exist "%%D\Floyd-Stunt-Double\app.py" (
   if not exist "%APP%" mkdir "%APP%"
   xcopy "%%D\Floyd-Stunt-Double\*" "%APP%\" /E /I /Y >nul
   if errorlevel 1 exit /b 1

@@ -6,6 +6,7 @@ jobs/
 outputs/
 previews/
 backups/
+logs/
 access.json
 __pycache__/
 *.pyc
