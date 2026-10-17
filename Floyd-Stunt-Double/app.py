@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
+import socket
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlparse
 
 import gradio as gr
 
@@ -85,6 +88,21 @@ def status_models():
 def access_status():
     label = next((label for label, mode in MODES.items() if mode == ACTIVE_ACCESS), "This PC only")
     return f"Running: {label}. Local: {ACTIVE_LOCAL or 'starting'}. Phone: {ACTIVE_LINK or 'off'}"
+
+
+def lan_phone_url(local_url: str) -> str:
+    port = urlparse(local_url).port
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+            probe.connect(("1.1.1.1", 80))
+            return f"http://{probe.getsockname()[0]}:{port}/"
+    except OSError:
+        candidates = socket.gethostbyname_ex(socket.gethostname())[2]
+        for candidate in candidates:
+            address = ipaddress.ip_address(candidate)
+            if address.is_private and not address.is_loopback and not address.is_link_local:
+                return f"http://{candidate}:{port}/"
+        return f"Find this PC's Wi-Fi IP address and open port {port} on your phone."
 
 
 def stop_server():
@@ -225,7 +243,7 @@ def main():
             _, remote_local, public = launch_one(remote, args.port + 1000,
                 server_name="0.0.0.0" if ACTIVE_ACCESS == "lan" else "127.0.0.1",
                 share=ACTIVE_ACCESS == "public", auth=auth, inbrowser=False)
-            ACTIVE_LINK = public or remote_local
+            ACTIVE_LINK = public or (lan_phone_url(remote_local) if ACTIVE_ACCESS == "lan" else remote_local)
             print(f"Phone access: {ACTIVE_LINK}", flush=True)
         except Exception as error:
             print(f"Phone access failed: {error}. Local app remains available at {ACTIVE_LOCAL}.", flush=True)
