@@ -78,6 +78,7 @@ class OptionalModelTests(unittest.TestCase):
             result = headliner_addon.automatic("preview.png", Path("head.png"))
         self.assertEqual(result, Path("result.png"))
         self.assertEqual(worker.call_args.args[1].getbbox(), (0, 0, 80, 50))
+        self.assertFalse(worker.call_args.kwargs.get("protect_painted", False))
 
 
 if __name__ == "__main__":

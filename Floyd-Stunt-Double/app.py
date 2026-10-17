@@ -156,9 +156,9 @@ def guided_preview(video, frame_time):
         picture = source.convert("RGB")
     picture.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
     editor = {"background": picture, "layers": [], "composite": picture.copy()}
-    return (editor, path, note + " · One visible person? Press Swap head automatically. Painting is optional.",
+    return (editor, path, note + " · One visible person? Press automatic swap. For a group, paint over the other faces to hide them.",
             path, None, None, None, gr.update(interactive=False), gr.update(interactive=False),
-            "Frame ready. Press automatic Head Swap for one visible person, or paint a specific head below.", gr.update(interactive=False))
+            "Frame ready. Leave the target face visible; hide any other faces in the optional mask below.", gr.update(interactive=False))
 
 
 def guided_auto_swap(frame_path, head_image, source_video, frame_time):
@@ -175,7 +175,7 @@ def guided_auto_swap(frame_path, head_image, source_video, frame_time):
                  "head": str(head.resolve()), "frame_time": float(frame_time or 0),
                  "mask": str(result.with_suffix(".mask.png"))}
         return (str(result), state,
-                "Automatic head swap complete. Check the preview; use painting if it changed the wrong person or other details.",
+                "Automatic head swap complete. Check the preview; if it chose the wrong person, paint over the other faces and use the protected swap.",
                 gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter"),
                 gr.update(interactive=True),
                 gr.update(interactive=True), gr.update(interactive=True))
@@ -202,11 +202,11 @@ def guided_swap(editor, frame_path, head_image, source_video, frame_time):
         return (str(result), state, "Head swap complete. Check the edited frame, then generate the video.",
                 gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter"),
                 gr.update(interactive=True),
-                gr.update(interactive=True, value="Swap using painted area"),
+                gr.update(interactive=True, value="Swap the unmasked visible head"),
                 gr.update(interactive=True))
     except Exception as error:
         return (gr.update(), gr.update(), f"Head swap failed: {error}", gr.update(interactive=False),
-                gr.update(interactive=False), gr.update(interactive=True, value="Swap using painted area"), gr.update())
+                gr.update(interactive=False), gr.update(interactive=True, value="Swap the unmasked visible head"), gr.update())
     finally:
         end_generation()
 
@@ -219,7 +219,7 @@ def guided_reswap(frame_path, state, head_image, source_video, frame_time):
         source = _path(source_video)
         head = _path(head_image)
         if not state or not source or not source.is_file() or not head or not head.is_file():
-            raise ValueError("Preview, paint, and swap a head first.")
+            raise ValueError("Preview a frame, hide the other faces, and swap the remaining visible head first.")
         if (str(source.resolve()) != state["video"]
                 or abs(float(frame_time or 0) - state["frame_time"]) > .01):
             raise ValueError("The video or selected frame time changed. Preview the frame again.")
@@ -264,7 +264,7 @@ def guided_generate(video, head_image, state, frame_time, target, start, duratio
                 or abs(float(frame_time or 0) - state["frame_time"]) > .01):
             raise ValueError("The video, head photo, or selected frame changed. Preview and swap the head again.")
         direction = "Keep the source video's body, outfit, and scene as close as possible. " + (extra or "")
-        plan = JobPlan(source, Path(state["result"]), target or "the painted person",
+        plan = JobPlan(source, Path(state["result"]), target or "the unmasked person",
                        float(start or 0), float(duration or 0), float(megapixels),
                        direction, bool(turbo), bool(preserve_audio),
                        float(preview_seconds or 0) if preview else None)
@@ -446,7 +446,7 @@ def build_ui():
                         keep_audio = gr.Checkbox(value=True, label="Keep the source video’s audio")
                         extra = gr.Textbox(label="Extra direction", placeholder="Keep the same lighting and camera angle", lines=2)
                 with gr.Tab("Head Swap + Video", id="guided"):
-                    gr.Markdown("**Video → frame → head swap → video.** Choose any frame for the head swap, then choose a separate video start and length. For several people or a precise edit, painting remains optional.")
+                    gr.Markdown("**Video → frame → head swap → video.** Choose any frame for the head swap, then choose a separate video start and length. In a group, paint over faces to hide them; leave the target face visible.")
                     guided_install_notice = gr.Markdown(
                         "**Video Swap isn't installed yet.** Open Settings to add it."
                         if not initial_video else "**Head Swap isn't installed yet.** Open Settings to add it.",
@@ -463,14 +463,14 @@ def build_ui():
                     guided_preview_image = gr.Image(label="Selected video frame", interactive=False, height=350)
                     guided_auto_button = gr.Button("4 · Swap the visible head automatically", variant="primary",
                                                    interactive=initial_head, elem_id="ggf-guided-auto")
-                    gr.Markdown("If the frame has more than one person, open the optional painted selection below.")
-                    with gr.Accordion("Choose a specific head by painting (optional)", open=False):
+                    gr.Markdown("**Several faces?** Hide the ones you do not want changed. The unpainted visible face is the target.")
+                    with gr.Accordion("Hide other faces with a mask (optional)", open=False):
                         guided_editor = gr.ImageEditor(
                             type="pil", format="png", image_mode="RGBA", transforms=(), layers=False,
                             sources=[], brush=gr.Brush(colors=["#f5b942"], color_mode="fixed"),
-                            label="Paint the head to replace · include hair and any hat", height=420,
+                            label="Paint faces to protect · leave the target face unpainted", height=420,
                             elem_id="ggf-guided-frame")
-                        guided_swap_button = gr.Button("Swap using painted area", variant="secondary",
+                        guided_swap_button = gr.Button("Swap the unmasked visible head", variant="secondary",
                                                        interactive=initial_head, elem_id="ggf-guided-swap")
                     with gr.Row():
                         guided_image = gr.Image(label="Head-swapped frame · check the whole result",
@@ -626,8 +626,8 @@ def build_ui():
             outputs=[guided_image, guided_state, guided_status, guided_submit, guided_preview_submit, guided_swap_button,
                      guided_retry_button])
         swap_event.failure(
-            lambda: ("The painted image did not finish uploading. Preview and repaint the frame, or use the saved selection with Try another head.",
-                     gr.update(interactive=True, value="Swap using painted area")),
+            lambda: ("The protected-face mask did not finish uploading. Preview and repaint the faces to hide, or use the saved selection with Try another head.",
+                     gr.update(interactive=True, value="Swap the unmasked visible head")),
             outputs=[guided_status, guided_swap_button], queue=False)
         retry_event = guided_retry_button.click(
             lambda: ("Trying another head…", gr.update(interactive=False), gr.update(interactive=False),
@@ -657,15 +657,15 @@ def build_ui():
         def reset_guided():
             return (None, None, None, None, None, gr.update(interactive=False),
                     gr.update(interactive=False),
-                    "Video or selected frame time changed. Preview the frame again; painting is optional.", gr.update(interactive=False))
+                    "Video or selected frame time changed. Preview the frame again; hide other faces if needed.", gr.update(interactive=False))
         for control in (guided_source, guided_frame_time):
             control.change(reset_guided, outputs=[guided_frame_path, guided_state, guided_preview_image, guided_image,
                                                   guided_result, guided_submit, guided_preview_submit, guided_status,
                                                   guided_retry_button],
                            queue=False)
         def head_changed(state):
-            note = ("Head photo changed. Use the same painted area with Try another head, or repaint and press Swap using current paint."
-                    if state and state.get("mask") else "Head photo ready. Preview a frame, paint the head, and press Swap using current paint.")
+            note = ("Head photo changed. Use the same hidden-face mask with Try another head, or repaint the faces to hide and swap again."
+                    if state and state.get("mask") else "Head photo ready. Preview a frame; hide other faces if the frame has more than one person.")
             return None, None, gr.update(interactive=False), gr.update(interactive=False), note
         guided_head.change(head_changed, inputs=[guided_state],
                            outputs=[guided_image, guided_result, guided_submit, guided_preview_submit, guided_status],

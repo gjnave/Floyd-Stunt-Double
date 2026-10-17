@@ -56,6 +56,14 @@ PROMPT = (
     "direction of the eye, head rotation, micro expressions from <image1>, "
     "high quality, sharp details"
 )
+PROTECTED_PROMPT = (
+    "head_swap: <image1> is the base image. Other people may have been hidden "
+    "behind flat gray paint or cropped away. Replace the head of the remaining visible "
+    "person with the head from <image2>, preserving that reference person's "
+    "face, hair, eye color, and identity. Follow the visible person's head "
+    "angle and expression. Keep their body, clothing, lighting, and scene. "
+    "Do not create or change a head in any gray protected area."
+)
 
 
 def _verified(path: Path, size: int, sha256: str) -> bool:
@@ -139,7 +147,7 @@ def selected_frame(editor: dict, frame_path: str) -> tuple[Image.Image, Image.Im
     if not frame_path or not Path(frame_path).is_file():
         raise ValueError("Preview a video frame first.")
     if not isinstance(editor, dict):
-        raise ValueError("Paint over the head in the frame preview first.")
+        raise ValueError("Paint over the other faces to hide them first.")
     background = editor.get("background")
     if background is None:
         raise ValueError("Preview a video frame first.")
@@ -157,47 +165,53 @@ def selected_frame(editor: dict, frame_path: str) -> tuple[Image.Image, Image.Im
             mask = ImageChops.lighter(mask, layer.convert("RGBA").getchannel("A"))
     mask = mask.point(lambda value: 255 if value > 0 else 0)
     if mask.getbbox() is None:
-        raise ValueError("Paint over the entire target head, including hair, then press Swap head.")
+        raise ValueError("Paint over the faces to protect, including hair; leave the target face visible.")
     if mask.size != original.size:
         mask = mask.resize(original.size, Image.Resampling.NEAREST)
     return original, mask
 
 
-def _model_crop(original: Image.Image, mask: Image.Image) -> tuple[int, int, int, int]:
-    """Focus model inference on the painted head, not nearby people.
-
-    The Headliner head-transfer worker does not accept a mask. The painted area
-    selects its input crop, while the same mask limits compositing afterward.
-    """
-    left, top, right, bottom = mask.getbbox()
-    if (left, top, right, bottom) == (0, 0, original.width, original.height):
-        return 0, 0, original.width, original.height
-    pad = max(24, round(max(right - left, bottom - top) * .08))
-    return (max(0, left - pad), max(0, top - pad),
-            min(original.width, right + pad), min(original.height, bottom + pad))
+def _protected_reference(original: Image.Image, painted: Image.Image) -> tuple[Image.Image, Image.Image]:
+    """Obscure painted faces for the model while preserving the source pixels."""
+    protected = painted.filter(ImageFilter.MaxFilter(17))
+    visible = ImageOps.invert(protected)
+    if visible.getbbox() is None:
+        raise ValueError("Leave the target head unpainted; the whole frame is hidden.")
+    reference = original.copy()
+    reference.paste((127, 127, 127), mask=protected)
+    return reference, protected
 
 
-def _render_swap(original: Image.Image, mask: Image.Image, head_path: Path, feather: int = 8) -> Path:
+def _render_swap(original: Image.Image, mask: Image.Image, head_path: Path,
+                 feather: int = 8, protect_painted: bool = False) -> Path:
     if not ready():
         raise RuntimeError("Head Swap models are not installed. Open Settings to add them.")
     if not head_path.is_file():
         raise ValueError("Upload a head reference image.")
     if mask.size != original.size or mask.getbbox() is None:
         raise ValueError("The saved head selection is invalid. Preview the frame and try again.")
-    crop = _model_crop(original, mask)
+    if protect_painted:
+        model_body, protected = _protected_reference(original, mask)
+        blend_mask = ImageOps.invert(protected)
+        prompt = PROTECTED_PROMPT
+    else:
+        model_body = original
+        blend_mask = mask
+        prompt = PROMPT
+    crop = (0, 0, original.width, original.height)
     job = JOBS / ("head-" + time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8])
     job.mkdir(parents=True, exist_ok=False)
     body = job / "body.png"
-    original.crop(crop).save(body)
+    model_body.crop(crop).save(body)
     with Image.open(head_path) as file:
         head = ImageOps.exif_transpose(file).convert("RGB")
-    reference = job / "head.png"
-    head.save(reference)
+    head_reference = job / "head.png"
+    head.save(head_reference)
     log = job / "headliner.log"
     command = [str(WORKER_PYTHON), "-u", str(CORE / "core_worker.py"),
                "--core-root", str(CORE / "vendor/comfy_core"),
                "--model-root", str(MODEL_ROOT), "--lora-root", str(LORA_ROOT)]
-    payload = {"body_path": str(body), "head_path": str(reference), "prompt": PROMPT,
+    payload = {"body_path": str(body), "head_path": str(head_reference), "prompt": prompt,
                "seed": -1, "steps": 6, "resolution": 768, "upscale": 1,
                "bfs_strength": 1.0, "turbo_strength": 1.0, "output_dir": str(job)}
     answer = run_protocol_worker(command, CORE, payload, log)
@@ -206,7 +220,7 @@ def _render_swap(original: Image.Image, mask: Image.Image, head_path: Path, feat
     with Image.open(answer["output"]) as file:
         generated = file.convert("RGB")
     generated = generated.resize((crop[2] - crop[0], crop[3] - crop[1]), Image.Resampling.LANCZOS)
-    blend = ImageChops.multiply(mask, mask.filter(ImageFilter.GaussianBlur(float(feather))))
+    blend = ImageChops.multiply(blend_mask, blend_mask.filter(ImageFilter.GaussianBlur(float(feather))))
     edited = original.copy()
     edited.paste(generated, crop[:2], blend.crop(crop))
     OUTPUTS.mkdir(parents=True, exist_ok=True)
@@ -217,8 +231,8 @@ def _render_swap(original: Image.Image, mask: Image.Image, head_path: Path, feat
 
 
 def swap(editor: dict, frame_path: str, head_path: Path, feather: int = 8) -> Path:
-    original, mask = selected_frame(editor, frame_path)
-    return _render_swap(original, mask, head_path, feather)
+    original, protected_mask = selected_frame(editor, frame_path)
+    return _render_swap(original, protected_mask, head_path, feather, protect_painted=True)
 
 
 def automatic(frame_path: str, head_path: Path) -> Path:
@@ -232,14 +246,14 @@ def automatic(frame_path: str, head_path: Path) -> Path:
 
 
 def reswap(frame_path: str, mask_path: str, head_path: Path, feather: int = 8) -> Path:
-    """Retry with the saved selection, without re-uploading the phone's editor canvas."""
+    """Retry with the saved protected faces, without another editor upload."""
     if not frame_path or not Path(frame_path).is_file() or not mask_path or not Path(mask_path).is_file():
-        raise ValueError("Preview and paint a frame before trying another head swap.")
+        raise ValueError("Preview a frame and paint over the other faces before trying another head swap.")
     with Image.open(frame_path) as source:
         original = ImageOps.exif_transpose(source).convert("RGB")
     with Image.open(mask_path) as source:
         mask = source.convert("L")
-    return _render_swap(original, mask, head_path, feather)
+    return _render_swap(original, mask, head_path, feather, protect_painted=True)
 
 
 if __name__ == "__main__":
