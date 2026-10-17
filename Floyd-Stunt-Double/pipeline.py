@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import json
 import math
 import re
 import shutil
@@ -120,16 +121,47 @@ class JobPlan:
     preserve_audio: bool = True
 
 
-def _start_worker(command: list[str], cwd: Path) -> subprocess.Popen:
+def _start_worker(command: list[str], cwd: Path, stderr=None) -> subprocess.Popen:
     global _active
     with _guard:
         if _active and _active.poll() is None:
             raise RuntimeError("A generation is already running.")
         flags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-        _active = subprocess.Popen(command, cwd=str(cwd), stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT, text=True,
+        _active = subprocess.Popen(command, cwd=str(cwd), stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.STDOUT if stderr is None else stderr, text=True,
                                    bufsize=1, creationflags=flags)
         return _active
+
+
+def run_protocol_worker(command: list[str], cwd: Path, payload: dict, log: Path) -> dict:
+    """Run one app-owned JSON-line inference request, then release its VRAM."""
+    global _active
+    _cancel.clear()
+    with log.open("w", encoding="utf-8") as diagnostics:
+        proc = _start_worker(command, cwd, stderr=diagnostics)
+        try:
+            output, _ = proc.communicate(json.dumps(payload) + "\n", timeout=900)
+        except subprocess.TimeoutExpired as error:
+            cancel_active()
+            proc.communicate()
+            raise RuntimeError(f"Head transfer timed out. See {log}") from error
+        finally:
+            with _guard:
+                if _active is proc:
+                    _active = None
+    if _cancel.is_set():
+        raise RuntimeError("Head transfer stopped.")
+    try:
+        messages = [json.loads(line) for line in output.splitlines() if line.strip()]
+    except (ValueError, TypeError) as error:
+        raise RuntimeError(f"Head transfer returned invalid output. See {log}") from error
+    if not messages or not messages[0].get("ready"):
+        detail = messages[0].get("error") if messages else "Headliner worker did not start"
+        raise RuntimeError(f"{detail}. See {log}")
+    if proc.returncode or len(messages) < 2:
+        raise RuntimeError(f"Head transfer stopped unexpectedly. See {log}")
+    return messages[-1]
 
 
 def cancel_active() -> bool:

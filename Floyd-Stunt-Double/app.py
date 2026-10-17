@@ -5,14 +5,17 @@ import argparse
 import ipaddress
 import os
 import socket
+import subprocess
 import threading
 import time
 from pathlib import Path
 from urllib.parse import urlparse
 
 import gradio as gr
+from PIL import Image
 
 from access import MODES, load as load_access, save as save_access, verify as verify_access
+from headliner_addon import ready as headliner_ready, swap as swap_head
 from pipeline import APP, JobPlan, busy, cancel_active, generate, missing_models, video_info, ffmpeg_path
 from update_source import check as check_source, apply as apply_source
 
@@ -26,8 +29,9 @@ CTRL_ENTER = """() => {
   window.__ggfStuntShortcut = true;
   document.addEventListener('keydown', event => {
     if (event.key !== 'Enter' || !event.ctrlKey || event.repeat || event.isComposing) return;
-    const btn = document.querySelector('#ggf-generate button, button#ggf-generate');
-    if (!btn || btn.disabled || btn.offsetParent === null) return;
+    const buttons = document.querySelectorAll('#ggf-generate button, button#ggf-generate, #ggf-guided-generate button, button#ggf-guided-generate');
+    const btn = [...buttons].find(item => !item.disabled && item.offsetParent !== null);
+    if (!btn) return;
     event.preventDefault(); btn.click();
   });
 }"""
@@ -72,6 +76,54 @@ def run_generation(video, character, target, start, duration, megapixels, turbo,
         yield message, result, gr.update(interactive=True, value="Generate · Ctrl+Enter")
     except Exception as error:
         yield f"Error: {error}", None, gr.update(interactive=True, value="Generate · Ctrl+Enter")
+
+
+def guided_preview(video, start):
+    path, note = preview_frame(video, start)
+    with Image.open(path) as source:
+        picture = source.convert("RGB")
+    picture.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
+    editor = {"background": picture, "layers": [], "composite": picture.copy()}
+    return (editor, note + " · Paint the entire target head, including hair.",
+            path, None, None, None, gr.update(interactive=False),
+            "Frame ready. Paint the head, then press Swap head.")
+
+
+def guided_swap(editor, frame_path, head_image, source_video, start):
+    try:
+        source = _path(source_video)
+        head = _path(head_image)
+        if not source or not source.is_file() or not head or not head.is_file():
+            raise ValueError("Upload a video and a head reference first.")
+        result = swap_head(editor, frame_path, head)
+        state = {"result": str(result), "video": str(source.resolve()),
+                 "head": str(head.resolve()), "start": float(start or 0)}
+        return (str(result), state, "Head swap complete. Check the edited frame, then generate the video.",
+                gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter"),
+                gr.update(interactive=True, value="Swap head again"))
+    except Exception as error:
+        return (None, None, f"Head swap failed: {error}", gr.update(interactive=False),
+                gr.update(interactive=True, value="Swap head"))
+
+
+def guided_generate(video, head_image, state, target, start, duration, megapixels, turbo, preserve_audio, extra):
+    try:
+        source = _path(video)
+        head = _path(head_image)
+        if not state or not source or not head or not Path(state["result"]).is_file():
+            raise ValueError("Preview a frame and finish its head swap first.")
+        if (str(source.resolve()) != state["video"] or str(head.resolve()) != state["head"]
+                or abs(float(start or 0) - state["start"]) > .01):
+            raise ValueError("The video, head photo, or start time changed. Preview and swap the head again.")
+        direction = "Keep the source video's body, outfit, and scene as close as possible. " + (extra or "")
+        plan = JobPlan(source, Path(state["result"]), target or "the painted person",
+                       float(start or 0), float(duration or 0), float(megapixels),
+                       direction, bool(turbo), bool(preserve_audio))
+        for message, result in generate(plan):
+            yield message, result, gr.update(interactive=False, value="Generating…")
+        yield message, result, gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter")
+    except Exception as error:
+        yield f"Error: {error}", None, gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter")
 
 
 def stop_generation():
@@ -127,18 +179,42 @@ def check_updates():
 
 def install_update():
     if busy():
-        return "Stop the current generation before updating."
+        yield "Stop the current generation before updating."
+        return
     try:
         mirror, modified = apply_source()
     except Exception as error:
-        return f"Update failed: {error}"
+        yield f"Update failed: {error}"
+        return
+    if not headliner_ready():
+        installer = APP.parent / "INSTALL.bat"
+        if not installer.is_file():
+            yield "Source updated, but INSTALL.bat is missing. Run the installer package again."
+            return
+        yield "Installing and verifying Head Swap models for this app…"
+        env = {**os.environ, "GGF_UNATTENDED": "1"}
+        with subprocess.Popen(["cmd.exe", "/d", "/c", str(installer), "headswap"],
+                              cwd=str(APP.parent), env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.STDOUT, text=True, bufsize=1,
+                              creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)) as proc:
+            assert proc.stdout is not None
+            last = "Installing Head Swap models…"
+            for line in proc.stdout:
+                clean = line.strip()
+                if clean.startswith(("[", "Downloading", "Head Swap", "Setup stopped")):
+                    last = clean[-200:]
+                    yield last
+            if proc.wait() or not headliner_ready():
+                yield f"Head Swap setup is incomplete. {last} Run INSTALL.bat to resume; existing files were kept."
+                return
     if not modified:
-        return "Already current."
+        yield "App source and Head Swap models are current."
+        return
     def restart_later():
         time.sleep(1.5)
         os._exit(75)
     threading.Thread(target=restart_later, daemon=True).start()
-    return "Updated source. Restarting the app now…"
+    yield "Updated source and verified required models. Restarting the app now…"
 
 
 def build_ui():
@@ -172,6 +248,41 @@ def build_ui():
                         turbo = gr.Checkbox(value=True, label="Faster 8-step generation")
                         keep_audio = gr.Checkbox(value=True, label="Keep the source video’s audio")
                         extra = gr.Textbox(label="Extra direction", placeholder="Keep the same lighting and camera angle", lines=2)
+                with gr.Tab("Head Swap + Video"):
+                    gr.Markdown("**Video → frame → head swap → video.** Keep the original person's outfit and performance while transferring a new head. Paint the whole head, including hair, so the rest of the frame can stay untouched.")
+                    with gr.Row():
+                        guided_source = gr.Video(label="1 · Performance video", height=300)
+                        guided_head = gr.Image(label="2 · New head reference", type="filepath", height=300)
+                    with gr.Row():
+                        guided_start = gr.Number(label="Start at (seconds)", value=0, precision=1, minimum=0)
+                        guided_duration = gr.Number(label="Length (seconds; 0 = to the end)", value=8, precision=1, minimum=0)
+                    guided_preview_button = gr.Button("3 · Preview frame", variant="secondary")
+                    guided_frame_note = gr.Markdown("")
+                    guided_frame_path = gr.State(None)
+                    with gr.Row():
+                        guided_editor = gr.ImageEditor(
+                            type="pil", format="png", image_mode="RGBA", transforms=(), layers=False,
+                            sources=[], brush=gr.Brush(colors=["#f5b942"], color_mode="fixed"),
+                            label="Paint the head to replace · include hair and any hat", height=420,
+                            elem_id="ggf-guided-frame")
+                        guided_image = gr.Image(label="Head-swapped frame · only painted pixels are replaced",
+                                                type="filepath", interactive=False, height=420)
+                    guided_swap_button = gr.Button("4 · Swap head", variant="primary", elem_id="ggf-guided-swap")
+                    guided_state = gr.State(None)
+                    guided_status = gr.Markdown("Preview a frame to begin.", elem_id="ggf-guided-status")
+                    guided_target = gr.Textbox(label="Which person in the video?", placeholder="The person in the blue shirt", lines=1)
+                    with gr.Row():
+                        guided_submit = gr.Button("Generate Stunt Double video · Ctrl+Enter", variant="primary",
+                                                  interactive=False, elem_id="ggf-guided-generate")
+                        guided_stop = gr.Button("Stop current generation", elem_id="ggf-guided-stop")
+                    guided_result = gr.Video(label="Finished video · fullscreen and download are in the player",
+                                             height=520, elem_id="ggf-guided-result")
+                    gr.Markdown("The edited frame guides the video model. Complex movement or cuts can still change clothing or facial details; try a short section first.")
+                    with gr.Accordion("More control", open=False):
+                        guided_resolution = gr.Slider(.3, .9, value=.4, step=.05, label="Output detail (megapixels)")
+                        guided_turbo = gr.Checkbox(value=True, label="Faster 8-step video generation")
+                        guided_audio = gr.Checkbox(value=True, label="Keep the source video’s audio")
+                        guided_extra = gr.Textbox(label="Extra video direction", lines=2)
                 with gr.Tab("Settings"):
                     gr.Markdown("The PC does the generating. Your phone can open the same app while this PC stays on.")
                     saved = load_access()
@@ -182,6 +293,8 @@ def build_ui():
                     save = gr.Button("Save access setting")
                     access_note = gr.Markdown(access_status())
                     model_note = gr.Markdown(status_models())
+                    head_model_note = gr.Markdown("Head Swap models ready." if headliner_ready()
+                                                  else "Head Swap models are missing. Run INSTALL.bat to download and verify them.")
                     with gr.Row():
                         refresh = gr.Button("Check model files")
                         release = gr.Button("Release models / free GPU memory")
@@ -193,15 +306,43 @@ def build_ui():
                     shutdown = gr.Button("Stop server")
                     confirm = gr.Button("Confirm: stop app on this PC", visible=False)
                     shutdown_note = gr.Markdown("")
-            gr.HTML('<div id="ggf-footer">Powered by MiniMax H3 and the H3 Character Swap LoRA · Floyd family / GGF</div>')
+            gr.HTML('<div id="ggf-footer">Powered by MiniMax H3, Qwen Image 2.1, BFS Head Swap, and Viggle Turbo · Floyd family / GGF</div>')
         preview.click(preview_frame, inputs=[source, start], outputs=[frame, frame_note], queue=False)
         submit.click(lambda: (None, "Queued…", gr.update(interactive=False, value="Generating…")),
                      outputs=[result, status, submit], queue=False).then(
             run_generation, inputs=[source, character, target, start, duration, resolution, turbo, keep_audio, extra],
             outputs=[status, result, submit])
         stop.click(stop_generation, outputs=[status], queue=False)
+        guided_preview_button.click(
+            guided_preview, inputs=[guided_source, guided_start],
+            outputs=[guided_editor, guided_frame_note, guided_frame_path, guided_image,
+                     guided_state, guided_result, guided_submit, guided_status], queue=False)
+        guided_swap_button.click(
+            lambda: ("Swapping head…", gr.update(interactive=False, value="Swapping…"),
+                     gr.update(interactive=False), None, None),
+            outputs=[guided_status, guided_swap_button, guided_submit, guided_image, guided_state],
+            queue=False).then(
+            guided_swap, inputs=[guided_editor, guided_frame_path, guided_head, guided_source, guided_start],
+            outputs=[guided_image, guided_state, guided_status, guided_submit, guided_swap_button])
+        guided_submit.click(
+            lambda: (None, "Queued…", gr.update(interactive=False, value="Generating…")),
+            outputs=[guided_result, guided_status, guided_submit], queue=False).then(
+            guided_generate,
+            inputs=[guided_source, guided_head, guided_state, guided_target, guided_start, guided_duration,
+                    guided_resolution, guided_turbo, guided_audio, guided_extra],
+            outputs=[guided_status, guided_result, guided_submit])
+        guided_stop.click(stop_generation, outputs=[guided_status], queue=False)
+        def reset_guided():
+            return (None, None, None, None, gr.update(interactive=False),
+                    "Input changed. Preview the frame and swap the head again.")
+        for control in (guided_source, guided_head, guided_start):
+            control.change(reset_guided, outputs=[guided_frame_path, guided_state, guided_image,
+                                                  guided_result, guided_submit, guided_status],
+                           queue=False)
         save.click(save_access, inputs=[mode, username, password], outputs=[access_note], queue=False)
-        refresh.click(status_models, outputs=[model_note], queue=False)
+        refresh.click(lambda: (status_models(), "Head Swap models ready." if headliner_ready()
+                               else "Head Swap models are missing. Run INSTALL.bat."),
+                      outputs=[model_note, head_model_note], queue=False)
         release.click(lambda: "Models are released after every job; no GPU models are resident." if not busy() else "Stop the current generation first.",
                       outputs=[model_note], queue=False)
         check_update.click(check_updates, outputs=[update_note, update], queue=False)
