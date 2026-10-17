@@ -14,12 +14,14 @@ The Video Swap choice downloads H3 Ref2VA weights and the H3 Character Swap V1.5
 
 1. Add the source video and a reference picture of the new character.
 2. Preview the chosen starting frame and describe which person in the video changes.
-3. Generate. The default is eight seconds; set Length to `0` for the rest of the video. Long clips run as consecutive eight-second parts and may show joins.
+3. Press **Turbo preview** to check a short, smaller video first, or **Generate** for the selected output quality and full chosen length. Turbo preview defaults to three seconds; change its length under More control, or set it to `0` to preview the entire selected interval. Both workflows use the same app-owned models. The default full length is eight seconds; set Length to `0` for the rest of the video. Long clips run as consecutive eight-second parts and may show joins.
 4. Watch or download the finished file in `outputs`.
 
 Local access needs no login. In Settings, choose a phone access mode and restart the app. A blank remote password allows anyone with the link to use it. A password affects phone access only; the local page stays password-free.
 
 In **Head Swap + Video**, upload the source video and head reference, preview the selected frame, then press **Swap the visible head automatically** when there is one clear person. Check the edited still and generate the video. The automatic path follows Headliner's unpainted image workflow; it may change other details in the still. For several people or when you need to preserve unpainted pixels exactly, expand **Choose a specific head by painting**, paint the full target head including hair, and press **Swap using painted area**. To try a different head reference, upload it and press **Try another head with same selection**; the app reuses the saved selection without making the phone upload the painted canvas again. The video model uses the still as a guide, so it can still reinterpret clothes or facial details on motion or cuts. Preview a short clip before processing a long one.
+
+Turbo preview also works after the head-swapped frame is ready. It forces the fast eight-step adapter and aims for about half the width and height of the selected full output, subject to the model's 256-pixel minimum per side. Preview MP4s are labeled `PREVIEW` in `outputs`; full Generate never inherits the preview length or smaller dimensions.
 
 Finished MP4 files are kept under `Floyd-Stunt-Double/outputs`. If a phone browser disconnects or refreshes before it shows the finished result, press **Show latest saved video on this PC** under the player to load the newest saved MP4 without regenerating. The button can show a result from either tab or another session on the same PC; check the filename in the status line.
 

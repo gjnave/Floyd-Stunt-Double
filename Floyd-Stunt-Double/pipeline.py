@@ -73,12 +73,17 @@ def video_info(path: Path) -> tuple[float, int, int, bool]:
         return duration, width, height, has_audio
 
 
-def output_shape(width: int, height: int, megapixels: float) -> tuple[int, int]:
+def output_shape(width: int, height: int, megapixels: float, half_size: bool = False) -> tuple[int, int]:
     if width < 1 or height < 1:
         raise ValueError("Invalid video dimensions")
     factor = (float(megapixels) * 1_000_000 / (width * height)) ** 0.5
     out_w = max(256, round(width * factor / 32) * 32)
     out_h = max(256, round(height * factor / 32) * 32)
+    if half_size:
+        # The worker requires multiples of 32. Keep its safe minimum even
+        # when that prevents an exact 50% reduction on a small input.
+        out_w = max(256, round(out_w / 64) * 32)
+        out_h = max(256, round(out_h / 64) * 32)
     return out_w, out_h
 
 
@@ -119,6 +124,7 @@ class JobPlan:
     extra_prompt: str = ""
     turbo: bool = True
     preserve_audio: bool = True
+    preview_seconds: float | None = None
 
 
 def _start_worker(command: list[str], cwd: Path, stderr=None) -> subprocess.Popen:
@@ -200,9 +206,12 @@ def generate(plan: JobPlan):
     if start >= total:
         raise ValueError("Start is past the end of the video.")
     duration = (total - start) if plan.duration <= 0 else min(float(plan.duration), total - start)
+    preview = plan.preview_seconds is not None
+    if preview and plan.preview_seconds > 0:
+        duration = min(duration, float(plan.preview_seconds))
     if duration < 0.9:
         raise ValueError("Choose at least one second of video.")
-    out_w, out_h = output_shape(width, height, plan.megapixels)
+    out_w, out_h = output_shape(width, height, plan.megapixels, half_size=preview)
     job_id = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
     work = JOBS / job_id
     work.mkdir(parents=True, exist_ok=False)
@@ -219,7 +228,7 @@ def generate(plan: JobPlan):
     image = work / "character" / ("reference" + plan.character.suffix.lower())
     image.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(plan.character, image)
-    result = OUTPUTS / f"Floyd-Stunt-Double-{job_id}.mp4"
+    result = OUTPUTS / f"Floyd-Stunt-Double-{'PREVIEW-' if preview else ''}{job_id}.mp4"
     parts: list[Path] = []
     # Native H3 supports up to 99 seconds. Short segments keep memory and
     # quality manageable, while allowing arbitrary total input duration.
@@ -257,9 +266,9 @@ def generate(plan: JobPlan):
                    "--prompt", prompt_for(plan.target, plan.extra_prompt),
                    "--width", str(out_w), "--height", str(out_h),
                    "--frames", str(valid_frames(clip_seconds)),
-                   "--steps", "8" if plan.turbo else "20",
-                   "--cfg", "1", "--sampler", "er_sde" if plan.turbo else "euler",
-                   "--scheduler", "normal" if plan.turbo else "beta",
+                   "--steps", "8" if plan.turbo or preview else "20",
+                   "--cfg", "1", "--sampler", "er_sde" if plan.turbo or preview else "euler",
+                   "--scheduler", "normal" if plan.turbo or preview else "beta",
                    "--vram-manager-auto", "--ref-image", str(image),
                    "--ref-video", str(clip), "--ref2va-checkpoint", str(models["diffusion"]),
                    "--text-encoder", str(models["text"]),
@@ -267,7 +276,7 @@ def generate(plan: JobPlan):
                    "--audio-vae", str(models["audio_vae"]),
                    "--lora", str(models["character"]), "--lora-strength", "1.0",
                    "--output", str(rendered)]
-        if plan.turbo:
+        if plan.turbo or preview:
             command += ["--lora", str(models["turbo"]), "--lora-strength", "1.0"]
         if use_audio:
             command += ["--ref-audio", str(wav), "--lock-source-audio-index", "1"]
@@ -312,4 +321,4 @@ def generate(plan: JobPlan):
                      "-c", "copy", str(result)])
     if not result.is_file() or result.stat().st_size == 0:
         raise RuntimeError("The output video was not created.")
-    yield f"Complete · saved to {result}", str(result)
+    yield f"{'Turbo preview complete' if preview else 'Complete'} · saved to {result}", str(result)

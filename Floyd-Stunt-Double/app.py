@@ -44,7 +44,7 @@ CTRL_ENTER = """() => {
   });
   let sound = null;
   document.addEventListener('click', event => {
-    if (!event.target.closest?.('#ggf-generate, #ggf-guided-generate, #ggf-guided-auto, #ggf-guided-swap, #ggf-guided-retry')) return;
+    if (!event.target.closest?.('#ggf-generate, #ggf-turbo-preview, #ggf-guided-generate, #ggf-guided-turbo-preview, #ggf-guided-auto, #ggf-guided-swap, #ggf-guided-retry')) return;
     const Audio = window.AudioContext || window.webkitAudioContext;
     if (!Audio) return;
     sound ||= new Audio();
@@ -72,7 +72,7 @@ CTRL_ENTER = """() => {
     let last = '';
     new MutationObserver(() => {
       const message = region.textContent || '';
-      const finished = message.includes('Complete · saved to') || message.toLowerCase().includes('head swap complete');
+      const finished = (message.includes('saved to') && message.toLowerCase().includes('complete')) || message.toLowerCase().includes('head swap complete');
       if (finished && message !== last) chime();
       last = message;
     }).observe(region, {subtree: true, childList: true, characterData: true});
@@ -105,24 +105,37 @@ def preview_frame(video, start):
     return str(target), f"Frame at {at:.1f}s · source {width} × {height} · {total:.1f}s"
 
 
-def run_generation(video, character, target, start, duration, megapixels, turbo, preserve_audio, extra):
+def run_generation(video, character, target, start, duration, megapixels, turbo, preserve_audio, extra,
+                   preview_seconds, preview=False):
+    full_label = "Generate · Ctrl+Enter"
+    preview_label = "Turbo preview · half-size"
+    def buttons(running):
+        return (gr.update(interactive=not running, value="Generating…" if running and not preview else full_label),
+                gr.update(interactive=not running, value="Previewing…" if running and preview else preview_label))
     path = _path(video)
     image = _path(character)
     if not begin_generation():
-        yield "Another generation or model download is running. Wait for it to finish.", None, gr.update(interactive=True, value="Generate · Ctrl+Enter")
+        yield "Another generation or model download is running. Wait for it to finish.", None, *buttons(False)
         return
     try:
         if not path or not image:
             raise ValueError("Upload a source video and character image.")
         plan = JobPlan(path, image, target or "", float(start or 0), float(duration or 0),
-                       float(megapixels), extra or "", bool(turbo), bool(preserve_audio))
+                       float(megapixels), extra or "", bool(turbo), bool(preserve_audio),
+                       float(preview_seconds or 0) if preview else None)
         for message, result in generate(plan):
-            yield message, result, gr.update(interactive=False, value="Generating…")
-        yield message, result, gr.update(interactive=True, value="Generate · Ctrl+Enter")
+            yield message, result, *buttons(True)
+        yield message, result, *buttons(False)
     except Exception as error:
-        yield f"Error: {error}", None, gr.update(interactive=True, value="Generate · Ctrl+Enter")
+        yield f"Error: {error}", None, *buttons(False)
     finally:
         end_generation()
+
+
+def run_turbo_preview(video, character, target, start, duration, megapixels, turbo, preserve_audio, extra,
+                      preview_seconds):
+    yield from run_generation(video, character, target, start, duration, megapixels, turbo, preserve_audio,
+                              extra, preview_seconds, preview=True)
 
 
 def guided_preview(video, start):
@@ -132,14 +145,14 @@ def guided_preview(video, start):
     picture.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
     editor = {"background": picture, "layers": [], "composite": picture.copy()}
     return (editor, path, note + " · One visible person? Press Swap head automatically. Painting is optional.",
-            path, None, None, None, gr.update(interactive=False),
+            path, None, None, None, gr.update(interactive=False), gr.update(interactive=False),
             "Frame ready. Press automatic Head Swap for one visible person, or paint a specific head below.", gr.update(interactive=False))
 
 
 def guided_auto_swap(frame_path, head_image, source_video, start):
     if not begin_generation():
         return (gr.update(), gr.update(), "Another job or model download is running. Wait for it to finish.",
-                gr.update(interactive=False), gr.update(interactive=True), gr.update())
+                gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True), gr.update())
     try:
         source = _path(source_video)
         head = _path(head_image)
@@ -152,10 +165,11 @@ def guided_auto_swap(frame_path, head_image, source_video, start):
         return (str(result), state,
                 "Automatic head swap complete. Check the preview; use painting if it changed the wrong person or other details.",
                 gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter"),
+                gr.update(interactive=True),
                 gr.update(interactive=True), gr.update(interactive=True))
     except Exception as error:
         return (gr.update(), gr.update(), f"Automatic head swap failed: {error}",
-                gr.update(interactive=False), gr.update(interactive=True), gr.update())
+                gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True), gr.update())
     finally:
         end_generation()
 
@@ -163,7 +177,7 @@ def guided_auto_swap(frame_path, head_image, source_video, start):
 def guided_swap(editor, frame_path, head_image, source_video, start):
     if not begin_generation():
         return (gr.update(), gr.update(), "Another job or model download is running. Wait for it to finish.",
-                gr.update(interactive=False), gr.update(interactive=True), gr.update())
+                gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True), gr.update())
     try:
         source = _path(source_video)
         head = _path(head_image)
@@ -175,11 +189,12 @@ def guided_swap(editor, frame_path, head_image, source_video, start):
                  "mask": str(result.with_suffix(".mask.png"))}
         return (str(result), state, "Head swap complete. Check the edited frame, then generate the video.",
                 gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter"),
+                gr.update(interactive=True),
                 gr.update(interactive=True, value="Swap using painted area"),
                 gr.update(interactive=True))
     except Exception as error:
         return (gr.update(), gr.update(), f"Head swap failed: {error}", gr.update(interactive=False),
-                gr.update(interactive=True, value="Swap using painted area"), gr.update())
+                gr.update(interactive=False), gr.update(interactive=True, value="Swap using painted area"), gr.update())
     finally:
         end_generation()
 
@@ -187,7 +202,7 @@ def guided_swap(editor, frame_path, head_image, source_video, start):
 def guided_reswap(frame_path, state, head_image, source_video, start):
     if not begin_generation():
         return (gr.update(), gr.update(), "Another job or model download is running. Wait for it to finish.",
-                gr.update(interactive=False), gr.update(interactive=True))
+                gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True))
     try:
         source = _path(source_video)
         head = _path(head_image)
@@ -200,10 +215,11 @@ def guided_reswap(frame_path, state, head_image, source_video, start):
                    "mask": str(result.with_suffix(".mask.png"))}
         return (str(result), updated, "Head swap complete. Check the edited frame, then generate the video.",
                 gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter"),
+                gr.update(interactive=True),
                 gr.update(interactive=True))
     except Exception as error:
         return (gr.update(), gr.update(), f"Head swap failed: {error}", gr.update(interactive=False),
-                gr.update(interactive=True))
+                gr.update(interactive=False), gr.update(interactive=True))
     finally:
         end_generation()
 
@@ -216,9 +232,15 @@ def latest_saved_video():
     return str(latest), f"Loaded saved video: {latest.name}"
 
 
-def guided_generate(video, head_image, state, target, start, duration, megapixels, turbo, preserve_audio, extra):
+def guided_generate(video, head_image, state, target, start, duration, megapixels, turbo, preserve_audio, extra,
+                    preview_seconds, preview=False):
+    full_label = "Generate Stunt Double video · Ctrl+Enter"
+    preview_label = "Turbo preview · half-size"
+    def buttons(running):
+        return (gr.update(interactive=not running, value="Generating…" if running and not preview else full_label),
+                gr.update(interactive=not running, value="Previewing…" if running and preview else preview_label))
     if not begin_generation():
-        yield "Another generation or model download is running. Wait for it to finish.", None, gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter")
+        yield "Another generation or model download is running. Wait for it to finish.", None, *buttons(False)
         return
     try:
         source = _path(video)
@@ -231,14 +253,21 @@ def guided_generate(video, head_image, state, target, start, duration, megapixel
         direction = "Keep the source video's body, outfit, and scene as close as possible. " + (extra or "")
         plan = JobPlan(source, Path(state["result"]), target or "the painted person",
                        float(start or 0), float(duration or 0), float(megapixels),
-                       direction, bool(turbo), bool(preserve_audio))
+                       direction, bool(turbo), bool(preserve_audio),
+                       float(preview_seconds or 0) if preview else None)
         for message, result in generate(plan):
-            yield message, result, gr.update(interactive=False, value="Generating…")
-        yield message, result, gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter")
+            yield message, result, *buttons(True)
+        yield message, result, *buttons(False)
     except Exception as error:
-        yield f"Error: {error}", None, gr.update(interactive=True, value="Generate Stunt Double video · Ctrl+Enter")
+        yield f"Error: {error}", None, *buttons(False)
     finally:
         end_generation()
+
+
+def guided_turbo_preview(video, head_image, state, target, start, duration, megapixels, turbo,
+                         preserve_audio, extra, preview_seconds):
+    yield from guided_generate(video, head_image, state, target, start, duration, megapixels, turbo,
+                               preserve_audio, extra, preview_seconds, preview=True)
 
 
 def stop_generation():
@@ -292,6 +321,7 @@ def model_panel_state(previous=None):
         gr.update(interactive=running),
         create_button, swap_button, swap_button, guided_button, (video, head),
         gr.update(visible=video), gr.update(visible=head),
+        create_button, guided_button,
     )
 
 
@@ -386,6 +416,8 @@ def build_ui():
                         frame_note = gr.Markdown("")
                     frame = gr.Image(label="Source frame · use this to describe the correct person", interactive=False, height=280)
                     with gr.Row():
+                        preview_submit = gr.Button("Turbo preview · half-size", variant="secondary",
+                                                   elem_id="ggf-turbo-preview", interactive=initial_video)
                         submit = gr.Button("Generate · Ctrl+Enter", variant="primary", elem_id="ggf-generate",
                                            interactive=initial_video)
                         stop = gr.Button("Stop current generation", elem_id="ggf-stop")
@@ -394,6 +426,8 @@ def build_ui():
                     gr.Markdown("If the phone page disconnects after a long run, press this to reopen the finished file without generating again.")
                     with gr.Accordion("More control", open=False):
                         resolution = gr.Slider(.3, .9, value=.4, step=.05, label="Output detail (megapixels)")
+                        preview_seconds = gr.Number(label="Turbo preview length (seconds; 0 = selected length)",
+                                                    value=3, precision=1, minimum=0)
                         turbo = gr.Checkbox(value=True, label="Faster 8-step generation")
                         keep_audio = gr.Checkbox(value=True, label="Keep the source video’s audio")
                         extra = gr.Textbox(label="Extra direction", placeholder="Keep the same lighting and camera angle", lines=2)
@@ -434,6 +468,8 @@ def build_ui():
                     guided_status = gr.Markdown("Preview a frame to begin.", elem_id="ggf-guided-status")
                     guided_target = gr.Textbox(label="Which person in the video?", placeholder="The person in the blue shirt", lines=1)
                     with gr.Row():
+                        guided_preview_submit = gr.Button("Turbo preview · half-size", variant="secondary",
+                                                          interactive=False, elem_id="ggf-guided-turbo-preview")
                         guided_submit = gr.Button("Generate Stunt Double video · Ctrl+Enter", variant="primary",
                                                   interactive=False, elem_id="ggf-guided-generate")
                         guided_stop = gr.Button("Stop current generation", elem_id="ggf-guided-stop")
@@ -444,6 +480,8 @@ def build_ui():
                     gr.Markdown("The edited frame guides the video model. Complex movement or cuts can still change clothing or facial details; try a short section first.")
                     with gr.Accordion("More control", open=False):
                         guided_resolution = gr.Slider(.3, .9, value=.4, step=.05, label="Output detail (megapixels)")
+                        guided_preview_seconds = gr.Number(label="Turbo preview length (seconds; 0 = selected length)",
+                                                           value=3, precision=1, minimum=0)
                         guided_turbo = gr.Checkbox(value=True, label="Faster 8-step video generation")
                         guided_audio = gr.Checkbox(value=True, label="Keep the source video’s audio")
                         guided_extra = gr.Textbox(label="Extra video direction", lines=2)
@@ -527,67 +565,86 @@ def build_ui():
                          outputs=[liz_guide, liz_step_one, liz_step_two, liz_replay], queue=False)
         create_jump.click(lambda: gr.update(selected="settings"), outputs=[tabs], queue=False)
         guided_install_jump.click(lambda: gr.update(selected="settings"), outputs=[tabs], queue=False)
-        submit.click(lambda: (None, "Queued…", gr.update(interactive=False, value="Generating…")),
-                     outputs=[result, status, submit], queue=False).then(
-            run_generation, inputs=[source, character, target, start, duration, resolution, turbo, keep_audio, extra],
-            outputs=[status, result, submit])
+        create_inputs = [source, character, target, start, duration, resolution, turbo, keep_audio, extra,
+                         preview_seconds]
+        submit.click(lambda: (None, "Queued…", gr.update(interactive=False, value="Generating…"),
+                              gr.update(interactive=False)),
+                     outputs=[result, status, submit, preview_submit], queue=False).then(
+            run_generation, inputs=create_inputs, outputs=[status, result, submit, preview_submit])
+        preview_submit.click(lambda: (None, "Preparing turbo preview…", gr.update(interactive=False),
+                                      gr.update(interactive=False, value="Previewing…")),
+                             outputs=[result, status, submit, preview_submit], queue=False).then(
+            run_turbo_preview, inputs=create_inputs, outputs=[status, result, submit, preview_submit])
         stop.click(stop_generation, outputs=[status], queue=False)
         recover.click(latest_saved_video, outputs=[result, status], queue=False)
         guided_preview_button.click(
             guided_preview, inputs=[guided_source, guided_start],
             outputs=[guided_editor, guided_preview_image, guided_frame_note, guided_frame_path, guided_image,
-                     guided_state, guided_result, guided_submit, guided_status, guided_retry_button], queue=False)
+                     guided_state, guided_result, guided_submit, guided_preview_submit, guided_status,
+                     guided_retry_button], queue=False)
         auto_event = guided_auto_button.click(
             lambda: ("Swapping the visible head…", gr.update(interactive=False),
-                     gr.update(interactive=False), None),
-            outputs=[guided_status, guided_auto_button, guided_submit, guided_result],
+                     gr.update(interactive=False), gr.update(interactive=False), None),
+            outputs=[guided_status, guided_auto_button, guided_submit, guided_preview_submit, guided_result],
             queue=False).then(
             guided_auto_swap, inputs=[guided_frame_path, guided_head, guided_source, guided_start],
-            outputs=[guided_image, guided_state, guided_status, guided_submit, guided_auto_button,
+            outputs=[guided_image, guided_state, guided_status, guided_submit, guided_preview_submit, guided_auto_button,
                      guided_retry_button])
         auto_event.failure(
             lambda: ("The head image did not finish uploading. Upload it again and retry.", gr.update(interactive=True)),
             outputs=[guided_status, guided_auto_button], queue=False)
         swap_event = guided_swap_button.click(
             lambda: ("Swapping head…", gr.update(interactive=False, value="Swapping…"),
-                     gr.update(interactive=False), None),
-            outputs=[guided_status, guided_swap_button, guided_submit, guided_result],
+                     gr.update(interactive=False), gr.update(interactive=False), None),
+            outputs=[guided_status, guided_swap_button, guided_submit, guided_preview_submit, guided_result],
             queue=False).then(
             guided_swap, inputs=[guided_editor, guided_frame_path, guided_head, guided_source, guided_start],
-            outputs=[guided_image, guided_state, guided_status, guided_submit, guided_swap_button,
+            outputs=[guided_image, guided_state, guided_status, guided_submit, guided_preview_submit, guided_swap_button,
                      guided_retry_button])
         swap_event.failure(
             lambda: ("The painted image did not finish uploading. Preview and repaint the frame, or use the saved selection with Try another head.",
                      gr.update(interactive=True, value="Swap using painted area")),
             outputs=[guided_status, guided_swap_button], queue=False)
         retry_event = guided_retry_button.click(
-            lambda: ("Trying another head…", gr.update(interactive=False), gr.update(interactive=False), None),
-            outputs=[guided_status, guided_retry_button, guided_submit, guided_result], queue=False).then(
+            lambda: ("Trying another head…", gr.update(interactive=False), gr.update(interactive=False),
+                     gr.update(interactive=False), None),
+            outputs=[guided_status, guided_retry_button, guided_submit, guided_preview_submit, guided_result], queue=False).then(
             guided_reswap, inputs=[guided_frame_path, guided_state, guided_head, guided_source, guided_start],
-            outputs=[guided_image, guided_state, guided_status, guided_submit, guided_retry_button])
+            outputs=[guided_image, guided_state, guided_status, guided_submit, guided_preview_submit,
+                     guided_retry_button])
         retry_event.failure(lambda: gr.update(interactive=True), outputs=[guided_retry_button], queue=False)
+        guided_inputs = [guided_source, guided_head, guided_state, guided_target, guided_start, guided_duration,
+                         guided_resolution, guided_turbo, guided_audio, guided_extra, guided_preview_seconds]
         guided_submit.click(
-            lambda: (None, "Queued…", gr.update(interactive=False, value="Generating…")),
-            outputs=[guided_result, guided_status, guided_submit], queue=False).then(
-            guided_generate,
-            inputs=[guided_source, guided_head, guided_state, guided_target, guided_start, guided_duration,
-                    guided_resolution, guided_turbo, guided_audio, guided_extra],
-            outputs=[guided_status, guided_result, guided_submit])
+            lambda: (None, "Queued…", gr.update(interactive=False, value="Generating…"),
+                     gr.update(interactive=False)),
+            outputs=[guided_result, guided_status, guided_submit, guided_preview_submit], queue=False).then(
+            guided_generate, inputs=guided_inputs,
+            outputs=[guided_status, guided_result, guided_submit, guided_preview_submit])
+        guided_preview_submit.click(
+            lambda: (None, "Preparing turbo preview…", gr.update(interactive=False),
+                     gr.update(interactive=False, value="Previewing…")),
+            outputs=[guided_result, guided_status, guided_submit, guided_preview_submit], queue=False).then(
+            guided_turbo_preview, inputs=guided_inputs,
+            outputs=[guided_status, guided_result, guided_submit, guided_preview_submit])
         guided_stop.click(stop_generation, outputs=[guided_status], queue=False)
         guided_recover.click(latest_saved_video, outputs=[guided_result, guided_status], queue=False)
         def reset_guided():
             return (None, None, None, None, None, gr.update(interactive=False),
+                    gr.update(interactive=False),
                     "Video or start time changed. Preview the frame again; painting is optional.", gr.update(interactive=False))
         for control in (guided_source, guided_start):
             control.change(reset_guided, outputs=[guided_frame_path, guided_state, guided_preview_image, guided_image,
-                                                  guided_result, guided_submit, guided_status, guided_retry_button],
+                                                  guided_result, guided_submit, guided_preview_submit, guided_status,
+                                                  guided_retry_button],
                            queue=False)
         def head_changed(state):
             note = ("Head photo changed. Use the same painted area with Try another head, or repaint and press Swap using current paint."
                     if state and state.get("mask") else "Head photo ready. Preview a frame, paint the head, and press Swap using current paint.")
-            return None, None, gr.update(interactive=False), note
+            return None, None, gr.update(interactive=False), gr.update(interactive=False), note
         guided_head.change(head_changed, inputs=[guided_state],
-                           outputs=[guided_image, guided_result, guided_submit, guided_status], queue=False)
+                           outputs=[guided_image, guided_result, guided_submit, guided_preview_submit, guided_status],
+                           queue=False)
         save.click(save_access, inputs=[mode, username, password], outputs=[access_note], queue=False)
         video_install.click(lambda: start_install("video"), outputs=[install_note], queue=False)
         head_install.click(lambda: start_install("head"), outputs=[install_note], queue=False)
@@ -601,7 +658,8 @@ def build_ui():
         panel_outputs = [welcome, create_notice, create_jump, guided_install_notice, guided_install_jump,
                          model_note, head_model_note, install_note, video_install, head_install,
                          video_remove, head_remove, stop_download, submit, guided_auto_button, guided_swap_button,
-                         guided_submit, model_previous, video_installed, head_installed]
+                         guided_submit, model_previous, video_installed, head_installed, preview_submit,
+                         guided_preview_submit]
         install_timer.tick(model_panel_state, inputs=[model_previous], outputs=panel_outputs, queue=False)
         refresh.click(lambda: (status_models(), "Head Swap models ready." if headliner_ready()
                                else "Head Swap models are not installed. Add them above if you want this workflow."),

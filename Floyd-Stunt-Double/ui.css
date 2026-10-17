@@ -18,6 +18,8 @@ body, .gradio-container { background:var(--ggf-bg)!important; color:var(--ggf-in
 #ggf-liz-guide img, #ggf-liz-guide video { max-height:220px; object-fit:contain; border-radius:10px; }
 #ggf-generate { font-weight:800!important; background:var(--ggf-gold)!important; color:#091425!important; }
 #ggf-generate button:disabled, #ggf-generate[disabled] { background:#334155!important; color:#b0bfd2!important; cursor:not-allowed!important; }
+#ggf-turbo-preview, #ggf-guided-turbo-preview { font-weight:800!important; background:#193652!important; color:#e8eef9!important; }
+#ggf-turbo-preview button:disabled, #ggf-turbo-preview[disabled], #ggf-guided-turbo-preview button:disabled, #ggf-guided-turbo-preview[disabled] { background:#334155!important; color:#b0bfd2!important; cursor:not-allowed!important; }
 #ggf-guided-generate, #ggf-guided-auto { font-weight:800!important; background:var(--ggf-gold)!important; color:#091425!important; }
 #ggf-guided-swap { font-weight:700!important; background:#192d47!important; color:var(--ggf-ink)!important; }
 #ggf-guided-generate button:disabled, #ggf-guided-generate[disabled], #ggf-guided-auto button:disabled, #ggf-guided-auto[disabled], #ggf-guided-swap button:disabled, #ggf-guided-swap[disabled] { background:#334155!important; color:#b0bfd2!important; cursor:not-allowed!important; }

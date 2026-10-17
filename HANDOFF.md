@@ -16,7 +16,7 @@ The standard installer prepares the app runtime without model weights. Settings 
 
 From this folder, use `cmd.exe /d /c "set GGF_UNATTENDED=1&& INSTALL.bat"` to exercise the real installer. Run `Floyd-Stunt-Double\.venv\Scripts\python.exe -m unittest discover -s tests -v`. `tests/smoke_guided.py --video <file> --head <image> --head-box x1,y1,x2,y2 --seconds 1` performs a real frame-to-video smoke; it requires the downloaded models and an NVIDIA GPU. A completed test on 2026-10-16 produced `Floyd-Stunt-Double/outputs/Floyd-Stunt-Double-Head-20261016-190401-0870c68f.png` and `Floyd-Stunt-Double/outputs/Floyd-Stunt-Double-20261016-190401-36f37248.mp4` without touching the existing Create tab.
 
-For publishing, push individual source files to Codeberg `Cognibuild/Floyd-Stunt-Double` (primary) and GitHub `gjnave/Floyd-Stunt-Double`; verify both archives contain `headliner_addon.py` and `headliner-requirements.txt`. Then rebuild the installer-only ZIP under the stable name `Floyd-Stunt-Double-Installer.zip`, preserving the prior ZIP first, and back up the source/installer to Drive. Do not maintain a source ZIP inside either Git repository. Record new remote commits and Drive IDs here after publication.
+For publishing, push individual source files to Codeberg `Cognibuild/Floyd-Stunt-Double` (primary) and GitHub `gjnave/Floyd-Stunt-Double`; verify both archives contain `headliner_addon.py` and `headliner-requirements.txt`. Source-only changes do **not** require rebuilding the installer ZIP: the root BAT already downloads the current repository. Rebuild `Floyd-Stunt-Double-Installer.zip` only when its five packaged root files change, preserving the prior ZIP first. Back up the current source to Drive; refresh the installer backup only when the installer ZIP changes. Do not maintain a source ZIP inside either Git repository. Record new remote commits and Drive IDs here after publication.
 
 ## 2026-10-16 release snapshot
 
@@ -36,6 +36,10 @@ The Head Swap editor can occasionally fail Gradio preprocessing while uploading 
 The guided tab now has an automatic, unpainted one-person head swap matching Headliner's simple path. Painted selection remains in an optional accordion for multiple people or tighter pixel preservation. A browser-side low-volume two-tone chime fires when video generation or a head swap completes, subject to browser audio restrictions. `model_packs.py` and `tests/test_optional_models.py` are source files; `update_source.py` lists the former.
 
 The root `INSTALL.bat` accepts a downloaded repository by its app entry point, not by optional feature files. It creates the UV-managed runtime and installs dependencies; model packs are requested from Settings. Do not add a version-specific source-file gate to the installer. Mirror the complete source revision to Codeberg and GitHub before distributing an installer ZIP.
+
+## Turbo preview
+
+Both Create and Head Swap + Video have a separate **Turbo preview** video button. It renders from the selected start using the same app-owned models, always enables the eight-step adapter, and targets about half the width and height of the chosen full-quality size (minimum 256 pixels per side, dimensions divisible by 32). The default preview length is three seconds; the More control field accepts `0` for the entire selected interval. The ordinary Generate button ignores the preview length and renders the full selected interval at the chosen quality. Previews have `PREVIEW` in the output filename; neither path deletes previous outputs. The head-transfer step must finish before either guided video button enables. Unit tests mock the worker and verify that preview length, worker steps, dimensions, and output names differ from full generation.
 
 ## Liz model-download guide
 

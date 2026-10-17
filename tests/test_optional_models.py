@@ -38,7 +38,7 @@ class OptionalModelTests(unittest.TestCase):
         with patch("app.pack_status", return_value=state), patch("app.work_busy", return_value=False), \
                 patch("app.has_files", return_value=False):
             updates = app.model_panel_state((False, False))
-        self.assertEqual(len(updates), 20)
+        self.assertEqual(len(updates), 22)
         self.assertTrue(updates[0]["visible"])
         self.assertIn("36.2 GB", updates[5])
         self.assertIn("19.0 GB", updates[6])
@@ -58,6 +58,7 @@ class OptionalModelTests(unittest.TestCase):
         self.assertEqual(updates[17], (True, False))
         self.assertTrue(updates[18]["visible"])
         self.assertFalse(updates[19]["visible"])
+        self.assertTrue(updates[20]["interactive"])
 
     def test_completed_head_download_shows_both_installed_badges(self):
         state = {"video_ready": True, "head_ready": True,
