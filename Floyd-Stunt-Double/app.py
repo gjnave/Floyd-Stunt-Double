@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import html
 import ipaddress
 import os
 import socket
@@ -31,6 +32,7 @@ HEAD_GB = HEAD_BYTES / 1e9
 ACTIVE_ACCESS = "local"
 ACTIVE_LINK = ""
 ACTIVE_LOCAL = ""
+ACTIVE_PHONE_ERROR = ""
 
 CTRL_ENTER = """() => {
   if (window.__ggfStuntShortcut) return;
@@ -340,7 +342,15 @@ def model_panel_state(previous=None):
 
 def access_status():
     label = next((label for label, mode in MODES.items() if mode == ACTIVE_ACCESS), "This PC only")
-    return f"Running: {label}. Local: {ACTIVE_LOCAL or 'starting'}. Phone: {ACTIVE_LINK or 'off'}"
+    if ACTIVE_LINK:
+        phone = ACTIVE_LINK
+    elif ACTIVE_PHONE_ERROR:
+        phone = f"Could not start phone access: {html.escape(ACTIVE_PHONE_ERROR)}. Check the PC console, then restart RUN.bat."
+    elif ACTIVE_ACCESS != "local":
+        phone = "Starting phone access… The link will appear here automatically."
+    else:
+        phone = "off"
+    return f"Running: {label}. Local: {ACTIVE_LOCAL or 'starting'}. Phone: {phone}"
 
 
 def lan_phone_url(local_url: str) -> str:
@@ -553,13 +563,16 @@ def build_ui():
                     gr.Markdown("Model removal affects this app's exact model files and download copies only. It does not remove outputs, the app, or files belonging to Headliner.")
                     gr.Markdown("### App access and maintenance")
                     gr.Markdown("The PC does the generating. Your phone can open the same app while this PC stays on.")
+                    gr.Markdown("After saving a phone mode, restart RUN.bat. The link below appears automatically when ready.")
                     saved = load_access()
                     current_label = next((key for key, value in MODES.items() if value == saved["mode"]), "This PC only")
                     mode = gr.Dropdown(list(MODES), value=current_label, label="Access mode", elem_id="ggf-network-mode")
                     username = gr.Textbox(label="Phone username (optional)", value=saved["username"])
                     password = gr.Textbox(label="Phone password (blank = no login)", type="password")
                     save = gr.Button("Save access setting")
-                    access_note = gr.Markdown(access_status())
+                    access_note = gr.Markdown(access_status(), elem_id="ggf-phone-status")
+                    save_note = gr.Markdown()
+                    phone_timer = gr.Timer(3)
                     with gr.Row():
                         refresh = gr.Button("Check model files")
                         release = gr.Button("Release models / free GPU memory")
@@ -670,7 +683,8 @@ def build_ui():
         guided_head.change(head_changed, inputs=[guided_state],
                            outputs=[guided_image, guided_result, guided_submit, guided_preview_submit, guided_status],
                            queue=False)
-        save.click(save_access, inputs=[mode, username, password], outputs=[access_note], queue=False)
+        save.click(save_access, inputs=[mode, username, password], outputs=[save_note], queue=False)
+        phone_timer.tick(access_status, outputs=[access_note], queue=False)
         video_install.click(lambda: start_install("video"), outputs=[install_note], queue=False)
         head_install.click(lambda: start_install("head"), outputs=[install_note], queue=False)
         stop_download.click(stop_install, outputs=[install_note], queue=False)
@@ -713,13 +727,14 @@ def launch_one(demo, port, **kwargs):
 
 
 def main():
-    global ACTIVE_ACCESS, ACTIVE_LINK, ACTIVE_LOCAL
+    global ACTIVE_ACCESS, ACTIVE_LINK, ACTIVE_LOCAL, ACTIVE_PHONE_ERROR
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--port", type=int, default=7890)
     args = parser.parse_args()
     settings = load_access()
     ACTIVE_ACCESS = settings["mode"]
+    ACTIVE_PHONE_ERROR = ""
     local = build_ui().queue(default_concurrency_limit=1)
     _, ACTIVE_LOCAL, _ = launch_one(local, args.port, server_name="127.0.0.1",
                                     share=False, auth=None, inbrowser=not args.no_browser)
@@ -734,6 +749,7 @@ def main():
             ACTIVE_LINK = public or (lan_phone_url(remote_local) if ACTIVE_ACCESS == "lan" else remote_local)
             print(f"Phone access: {ACTIVE_LINK}", flush=True)
         except Exception as error:
+            ACTIVE_PHONE_ERROR = str(error)
             print(f"Phone access failed: {error}. Local app remains available at {ACTIVE_LOCAL}.", flush=True)
     try:
         while True:
